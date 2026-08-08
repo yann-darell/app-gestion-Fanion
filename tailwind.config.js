@@ -6,6 +6,7 @@ export default {
             colors: {
                 ink: "#1B2A4A",
                 paper: "#FAF9F5",
+                "paper-dark": "#F0EEEA",
                 slate: "#5B6B82",
                 "fanion-green": "#1E7A4C",
                 "fanion-gold": "#C99A3B",

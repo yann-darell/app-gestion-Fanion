@@ -8,7 +8,7 @@
         "dev": "vite",
         "build": "tsc && vite build && electron-builder",
         "build:renderer": "vite build",
-        "electron:dev": "tsc -p tsconfig.electron.json && electron .",
+        "electron:dev": "tsc -p tsconfig.electron.json && node -e \"require('fs').cpSync('electron/db/migrations','dist-electron/db/migrations',{recursive:true})\" && electron .",
         "db:migrate": "ts-node electron/db/migrate.ts"
     },
     "dependencies": {

@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from "electron";
 import path from "path";
+import { runMigrations } from "./db/migrate";
 
 const isDev = !app.isPackaged;
 
@@ -23,6 +24,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    try {
+        runMigrations();
+    } catch (err) {
+        console.error("Échec du lancement des migrations de la base de données :", err);
+        app.quit();
+        process.exit(1);
+    }
     createWindow();
     app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
