@@ -1,107 +1,96 @@
-# REGLES_TECHNIQUES.md
-## Règles de développement — École "Le Fanion"
+# REGLES_TECHNIQUES.md (v2)
+## Règles de développement — Plateforme "Le Fanion"
 
-> À charger avec `CONTEXTE_ANTIGRAVITY.md`. Ce document fixe **l'ordre de travail** et **les conventions de code**. L'agent IA doit refuser d'écrire une page tant que sa couche back correspondante n'existe pas, et refuser de créer un fichier hors de la structure imposée ci-dessous.
-
----
-
-## 1. Règle d'or : toujours Back → IPC → Front, jamais l'inverse
-
-Pour **chaque fonctionnalité**, l'ordre est **non négociable** :
-
-1. **Schéma de données** (migration SQL si nouvelle table/colonne)
-2. **Repository** (requêtes SQL brutes, une méthode = une opération)
-3. **Service** (logique métier, validation, transactions)
-4. **Handler IPC** (expose le service au preload, gère les erreurs)
-5. **Types partagés** (requête/réponse du canal IPC)
-6. **Preload** (ajout du canal dans `window.api`)
-7. **Front** : hook de données (`useStudents`, `usePayments`...) qui appelle `window.api`
-8. **Front** : composants et page qui consomment le hook
-
-**Pourquoi** : coder le front avant que la donnée existe produit du mock, des types inventés, et des allers-retours inutiles. Une fonctionnalité n'est "commençable côté UI" que si son canal IPC répond déjà (même avec des données de test en base).
-
-**Exception tolérée** : maquettage visuel pur (voir doc `DESIGN_VISUEL.md`) sur données statiques, uniquement pour valider un layout — ce code est jetable et explicitement commenté `// MAQUETTE TEMPORAIRE`, jamais branché sur un vrai state applicatif.
+> À charger avec `CONTEXTE_ANTIGRAVITY.md` et `SECURITE.md`. Remplace la version v1 (mono-poste). L'agent IA doit refuser d'écrire du code front tant que la couche back/Supabase correspondante (table, policy RLS, fonction) n'existe pas et n'est pas testée.
 
 ---
 
-## 2. Convention de dossier : une feature = un dossier autonome
+## 1. Règle d'or : Données → Sécurité → API → Front, jamais l'inverse
 
-Chaque page/fonctionnalité du renderer vit dans **son propre dossier sous `src/pages/`**, avec cette structure fixe :
+Pour chaque fonctionnalité, ordre non négociable :
 
+1. **Migration SQL** (table PostgreSQL, via Supabase)
+2. **Policy RLS** correspondante — écrite en même temps que la table, jamais après (voir `SECURITE.md` §4)
+3. **Fonction/service métier** si logique complexe (ex : allocation de paiement par tranche, calcul de moyenne) — centralisée, testée isolément
+4. **Test manuel de l'accès** avec un compte de chaque rôle concerné (pas seulement le compte admin)
+5. **Client API** (wrapper autour de `@supabase/supabase-js`), utilisé identiquement par le bureau et le web
+6. **Front** : hook de données, puis composants/pages
+
+**Aucune exception** : contrairement à la v1 où le mono-poste tolérait un peu de laxisme, une policy RLS oubliée en v2 est une vraie faille de sécurité exploitable à distance.
+
+---
+
+## 2. Deux clients, un seul cœur de logique
+
+L'application de bureau (Electron) et la plateforme web partagent la même base Supabase et, autant que possible, le même code de logique métier (hooks, validation zod, appels API) — seule la couche de présentation (layout, navigation) diffère.
+
+Convention de dossier proposée :
+```
+packages/
+├── shared/                # logique partagée bureau + web
+│   ├── api/                # wrapper Supabase, une fonction par opération métier
+│   ├── hooks/               # hooks de données réutilisables
+│   ├── validation/           # schémas zod partagés
+│   └── types/                # types générés depuis le schéma Supabase
+├── desktop/                # Electron, spécifique bureau
+│   └── src/pages, components/ui, components/layout...
+└── web/                    # plateforme web, spécifique web
+    └── src/pages, components/ui, components/layout...
+```
+
+**Design system dupliqué ou partagé ?** Recommandé : dupliquer les composants `ui/` entre `desktop` et `web` au départ (plus simple, moins de risque de régression croisée), mutualiser seulement si la duplication devient un vrai fardeau constaté — ne pas sur-ingénierier un monorepo partagé dès le premier lot.
+
+---
+
+## 3. Convention de dossier interne (reprise de la v1, inchangée)
+
+Une feature = un dossier autonome avec sa page, ses composants locaux, ses hooks locaux :
 ```
 src/pages/students/
-├── StudentsListPage.tsx        # page = composant exporté par défaut
-├── StudentsListPage.module.css # si CSS Modules (sinon classes Tailwind inline)
-├── components/                 # composants UTILISÉS UNIQUEMENT par cette page
+├── StudentsListPage.tsx
+├── components/
 │   ├── StudentRow.tsx
-│   ├── StudentFilters.tsx
 │   └── NewStudentModal.tsx
-├── hooks/                      # hooks spécifiques à cette feature
-│   └── useStudentsList.ts
-└── types.ts                    # types locaux à la page (si non partagés)
+└── hooks/
+    └── useStudentsList.ts
 ```
-
-Règles associées :
-
-- **Un composant utilisé par une seule page reste dans `components/` de cette page.** Il ne monte dans `src/components/` global que le jour où une **deuxième page** en a besoin (règle "rule of two" — pas d'anticipation prématurée).
-- **`src/components/ui/`** est réservé aux briques génériques sans connaissance métier (`Button`, `Table`, `Modal`...) — jamais de logique métier ni d'appel `window.api` dedans.
-- **`src/components/layout/`** = éléments de structure globale (Sidebar, Header) uniquement.
-- Chaque dossier de feature peut avoir un sous-dossier `components/` mais **jamais plus d'un niveau d'imbrication** (pas de `components/components/`).
-- Le nom du fichier page = `NomDeLaPage.tsx` en PascalCase, suffixé `Page` (`StudentsListPage.tsx`, pas `page.tsx` générique — on n'est pas sur du Next.js App Router, la convention `page.tsx` n'a pas de sens ici).
-
-Côté `electron/`, même logique de regroupement **par domaine métier**, pas par type technique global :
-
-```
-electron/
-├── students/
-│   ├── students.repository.ts
-│   ├── students.service.ts
-│   └── students.handlers.ts
-├── finance/
-│   ├── finance.repository.ts
-│   ├── finance.service.ts
-│   ├── receipt.service.ts
-│   └── finance.handlers.ts
-└── bulletins/
-    ├── bulletins.repository.ts
-    ├── bulletins.service.ts
-    ├── docx-generator.service.ts
-    └── bulletins.handlers.ts
-```
-
-(Ceci remplace la séparation par couches techniques horizontales proposée initialement dans `CONTEXTE_ANTIGRAVITY.md` — on regroupe **par domaine** pour que tout le code d'une feature soit trouvable au même endroit, back compris.)
+Un composant ne monte dans `components/ui/` global que lorsqu'une **deuxième page** en a besoin (règle "rule of two").
 
 ---
 
-## 3. Règles de qualité obligatoires (à chaque PR/lot de travail)
+## 4. Priorité mobile pour le web
 
-- **Zéro `any`** sans commentaire justifiant pourquoi.
-- **Zéro logique métier dans un composant `.tsx`** — un composant appelle un hook, affiche un état (`loading` / `error` / `data`), ne calcule rien de significatif lui-même.
-- **Zéro requête SQL en dehors d'un repository.**
-- **Toute mutation DB multi-tables = transaction explicite.**
-- **Tout canal IPC testé manuellement avant de passer au front** (via un script Node ou la console Electron) — ne pas découvrir un bug SQL en cliquant dans l'UI.
-- **Un commit = une feature ou un fix, jamais un mélange.**
+Toute page du client `web` destinée à un usage enseignant (en particulier la saisie de notes) doit être **développée et testée d'abord en largeur mobile** (~375px), puis élargie pour desktop — pas l'inverse. Utiliser les classes responsive Tailwind (`sm:`, `md:`, `lg:`) systématiquement, jamais de largeur fixe en pixels sur un conteneur principal.
 
 ---
 
-## 4. Ordre de développement global du projet (macro)
+## 5. Règles de qualité obligatoires
 
-Reprend et précise l'ordre déjà fixé dans `CONTEXTE_ANTIGRAVITY.md`, avec le détail back/front à chaque étape :
+- Zéro `any` sans justification commentée.
+- Zéro logique métier dans un composant `.tsx`.
+- Zéro requête Supabase brute en dehors de la couche `api/`.
+- Toute mutation multi-tables reste transactionnelle (fonctions PostgreSQL / RPC Supabase si nécessaire pour garantir l'atomicité, plutôt que plusieurs appels séquentiels côté client).
+- Un commit = une feature ou un fix, jamais un mélange.
+- **Chaque nouvelle table testée avec un compte de test par rôle avant de passer au front** (voir `SECURITE.md`).
 
-| Lot | Back | Front |
+---
+
+## 6. Ordre de développement global (macro), aligné sur le cahier des charges
+
+| Lot | Contenu | Validation avant de continuer |
 |---|---|---|
-| 0. Socle | DB + migrations + connexion + script de seed de test | Design system `ui/` (section design), layout Sidebar/Router |
-| 1. Élèves | students repository/service/handlers | Liste, fiche, formulaire création/édition |
-| 2. Bulletins (notes) | grades + subjects repository/service/handlers | Grille de saisie des notes par classe |
-| 3. Bulletins (génération) | bulletin.service (calcul provisoire) + docx-generator | Écran génération, statut de complétude |
-| 4. Finance | payments/fee_schedules repository/service + receipt PDF | Vue élève, vue d'ensemble, bouton paiement |
-| 5. Tableau de bord | agrégation de requêtes existantes, pas de nouvelle table | Dashboard |
-| 6. Paramètres | backup/restore DB, gestion année scolaire active | Écran paramètres |
+| A. Fondation | Projet Supabase, tables organisation (divisions, school_years, classes), authentification, policies RLS de base | Connexion possible avec un compte de test par rôle |
+| B. Élèves | Migration depuis la logique v1, adaptée à Supabase Storage pour les photos | CRUD élève fonctionnel, RLS vérifiée |
+| C. Notes | Matières, coefficients, attributions enseignants, saisie | Un compte enseignant ne voit que son périmètre (test réel, pas supposé) |
+| D. Bulletins | Exploitation des fichiers Word réels | Génération d'un bulletin réel |
+| E. Finance | Tarifs, allocation par tranche, reçus avec logo | Paiement réparti correctement, reçu généré et lisible |
+| F. Fournitures | Double mode physique/monétaire | Suivi par élève fonctionnel |
+| G. Web responsive | Interface mobile-first complète | Saisie de notes testée sur un vrai téléphone |
 
-**Règle d'arrêt** : on ne commence jamais le "Front" d'un lot tant que la ligne "Back" du même lot n'est pas terminée et testée.
+**Priorité de présentation immédiate confirmée par le client** : Élèves → Finance (avec reçu+logo) → Bulletins (si le fichier Word est prêt).
 
 ---
 
-## 5. Ce que l'agent IA doit faire si une instruction contredit ce document
+## 7. Ce que l'agent IA doit faire en cas de doute
 
-Signaler explicitement la contradiction et proposer un choix, plutôt que de trancher silencieusement. Exemple : si on lui demande "crée vite fait la page Finance" alors que le back Finance n'existe pas encore, il doit répondre qu'il faut d'abord faire le repository/service/handler, et demander confirmation avant de faire une maquette temporaire.
+Si une instruction contredit ce document ou `SECURITE.md`, signaler explicitement la contradiction et proposer un choix, plutôt que de trancher silencieusement — en particulier pour tout ce qui touche aux permissions par rôle.

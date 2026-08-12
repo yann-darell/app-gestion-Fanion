@@ -1,105 +1,69 @@
-# DESIGN_VISUEL.md
+# DESIGN_VISUEL.md (v2)
 ## Identité visuelle — Le Fanion
 
-> À charger avec `CONTEXTE_ANTIGRAVITY.md` et `REGLES_TECHNIQUES.md`. Ce document fixe la direction visuelle. L'agent IA ne doit pas inventer de nouvelles couleurs, polices ou styles de composants en dehors de ce système sans le signaler.
+> Remplace la v1. Changement principal : utilisation du **vrai logo officiel** et de la **vraie couleur de l'école** (extraite du logo), plus les règles d'adaptation mobile pour la plateforme web.
 
 ---
 
-## 1. Parti pris
+## 1. Identité de marque
 
-C'est un **outil de travail quotidien** pour la secrétaire et le principal — pas une vitrine. La priorité absolue est la **lisibilité des données** (tableaux, montants, notes) et la **rapidité de repérage visuel** (qui a payé, qui n'a pas encore de notes complètes). On évite tout habillage décoratif qui ralentit la lecture.
+**Un seul logo, une seule charte, dans toute la plateforme**, quelle que soit la division consultée (confirmé par le client — malgré deux dénominations commerciales différentes entre Collège et Primaire en réalité).
 
-L'identité vient du nom de l'école : **le fanion**, ce petit étendard triangulaire qui marque un rang, une équipe, une réussite (fanion de classement sportif, fanion de classe). C'est l'élément signature du système : une forme de pennant réutilisée comme **marqueur de statut** dans toute l'appli, à la place des badges ronds génériques.
-
-Ambiance générale : **sobre, structurée, un peu "registre officiel"** — cohérent avec un bulletin scolaire et un reçu de paiement, qui sont eux-mêmes des documents formels.
+Logo officiel : écusson en forme d'engrenage, toque de diplômé, livre ouvert, bandeau "le Fanion" — fichier fourni par le client, à intégrer tel quel (ne pas le redessiner). Utiliser une version détourée (fond transparent) pour l'intégration UI (en-tête, écran de connexion, reçus PDF, bulletins).
 
 ---
 
-## 2. Palette (jetons de couleur)
+## 2. Palette (mise à jour avec la vraie couleur du logo)
 
-| Nom | Hex | Usage |
-|---|---|---|
-| `--ink` | `#1B2A4A` | Texte principal, titres, éléments de navigation actifs |
-| `--paper` | `#FAF9F5` | Fond général (blanc cassé, effet papier registre) |
-| `--slate` | `#5B6B82` | Texte secondaire, labels, texte désactivé |
-| `--fanion-green` | `#1E7A4C` | Accent positif : payé, notes complètes, validation |
-| `--fanion-gold` | `#C99A3B` | Accent de mise en avant : meilleur rang, mention, éléments actifs secondaires |
-| `--signal-red` | `#B3432E` | Alerte : impayé, notes manquantes, erreur |
-| `--line` | `#E4E0D6` | Bordures, séparateurs, lignes de tableau |
+| Nom | Hex | Usage | Changement vs v1 |
+|---|---|---|---|
+| `--ink` | `#150A5E` | Texte principal, en-têtes, navigation active | **Modifié** — bleu indigo extrait directement du logo officiel (v1 utilisait un bleu inventé `#1B2A4A`) |
+| `--paper` | `#FAF9F5` | Fond général | Inchangé |
+| `--slate` | `#5B6B82` | Texte secondaire | Inchangé |
+| `--fanion-green` | `#1E7A4C` | Payé / validé | Inchangé |
+| `--fanion-gold` | `#C99A3B` | Partiel / mention | Inchangé |
+| `--signal-red` | `#B3432E` | Impayé / alerte | Inchangé |
+| `--line` | `#E4E0D6` | Bordures | Inchangé |
 
-Règle stricte : **pas de dégradés, pas de couleurs hors de cette liste.** Le vert et l'or ne sont utilisés qu'en accents ponctuels (badge, icône, bordure gauche d'une carte) — jamais en grands aplats de fond.
-
----
-
-## 3. Typographie
-
-| Rôle | Police | Usage |
-|---|---|---|
-| Display (titres de page, en-têtes de bulletin) | **Source Serif 4** (serif institutionnel, sérieux, lisible en gras) | Titres de page, en-tête du dashboard |
-| Corps de texte / UI | **Inter** (sans-serif humaniste, très lisible en petite taille) | Formulaires, tableaux, boutons, labels |
-| Données chiffrées (montants, notes, matricules) | **IBM Plex Mono** | Colonnes de chiffres dans les tableaux — chiffres tabulaires alignés, essentiel pour scanner une colonne de montants ou de moyennes d'un coup d'œil |
-
-Échelle type (base 16px) : `12 / 14 / 16 / 20 / 25 / 31 / 39px` (ratio ~1.25). Les titres de page utilisent 25–31px en Source Serif 4 medium/semibold ; le corps reste en 14–16px Inter regular.
+**Le badge-fanion** (v1) reste comme convention interne d'interface pour les statuts (payé/partiel/impayé, mention) — usage distinct du logo officiel, pas de conflit : le logo identifie l'école, le badge-fanion est un élément fonctionnel d'UI.
 
 ---
 
-## 4. Layout
+## 3. Typographie (inchangée)
 
-Structure classique d'application métier, pas de page marketing :
-
-```
-┌───────────┬─────────────────────────────────────┐
-│           │  PageHeader (titre + actions)         │
-│  Sidebar  ├─────────────────────────────────────┤
-│  (fixe,   │                                       │
-│  icônes + │        Contenu de la page             │
-│  labels)  │   (table, formulaire, cartes...)      │
-│           │                                       │
-└───────────┴─────────────────────────────────────┘
-```
-
-- Sidebar fixe à gauche, fond `--ink`, texte `--paper`, item actif marqué par un petit **fanion** (▸ triangle plein) devant le label plutôt qu'un simple surlignage.
-- Contenu sur fond `--paper`, cartes/tableaux sur blanc pur avec bordure `--line` fine (1px), **coins très légèrement arrondis (4–6px)** — pas de neumorphism, pas d'ombres portées lourdes. Une ombre discrète seulement sur les modales.
-- Densité : les tableaux (élèves, paiements, notes) doivent privilégier la **densité d'information** — lignes compactes (36–40px de hauteur), pas de gros espacements façon landing page.
+Source Serif 4 (titres) / Inter (corps) / IBM Plex Mono (données chiffrées) — voir v1 pour le détail. Prévoir un fournisseur de police local (fichiers `.woff2` embarqués) plutôt qu'un CDN, la plateforme n'étant pas garantie hors-ligne mais un chargement de police externe reste une dépendance évitable.
 
 ---
 
-## 5. Élément signature : le badge-fanion
+## 4. Adaptation mobile (nouveau, priorité pour le web)
 
-Au lieu de badges ronds/rectangulaires classiques pour les statuts, on utilise une **petite forme de pennant** (triangle avec base légèrement concave, comme un vrai fanion en tissu) :
+La plateforme web doit être conçue **mobile-first**, en particulier les écrans de saisie de notes destinés aux enseignants sur téléphone.
 
-- Fanion vert plein = payé / notes complètes / validé
-- Fanion or plein = premier de classe / mention / meilleur élève du trimestre
-- Fanion rouge (contour seulement, pas plein) = impayé / notes manquantes / en retard
-- Fanion gris contour = en attente / non applicable
+### 4.1 Layout
+- **Desktop/bureau** : sidebar fixe + contenu (inchangé v1).
+- **Web mobile** : navigation par menu déroulant ou barre inférieure (à trancher en session, pas de sidebar fixe sur petit écran) ; le contenu occupe toute la largeur.
 
-Ce même symbole sert à la fois de **puce de statut dans les tableaux** et de **décoration discrète sur l'en-tête du bulletin PDF/Word** (rappel de marque cohérent entre l'outil et le document produit).
+### 4.2 Densité
+Les tableaux denses (v1, pour la richesse d'information sur desktop) doivent se transformer en **listes de cartes empilées** sur mobile plutôt que des tableaux à défilement horizontal illisibles — un tableau de notes avec 10 colonnes ne doit jamais forcer un défilement horizontal sur téléphone.
 
-**Restriction** : ce motif est LE seul élément décoratif du système. Pas d'icônes fantaisistes, pas de mascotte, pas d'illustrations. Le reste de l'interface reste typographique et tabulaire.
+### 4.3 Saisie de notes sur mobile — attention particulière
+- Champs numériques avec clavier adapté (`inputmode="decimal"`).
+- Boutons de validation/sauvegarde toujours visibles sans défilement (zone fixe en bas d'écran si liste longue).
+- Sauvegarde progressive recommandée (pas d'obligation de tout saisir avant de pouvoir enregistrer) — à confirmer en session selon la complexité d'implémentation.
 
----
-
-## 6. Composants — règles de style
-
-- **Boutons** : rectangulaires, coins 4px, fond `--ink` (action principale), contour `--slate` (action secondaire), fond `--signal-red` uniquement pour les actions destructrices (supprimer). Pas de bouton "ghost" flottant.
-- **Tableaux** : en-tête sticky, fond légèrement teinté (`--paper` plus foncé de 3%), lignes séparées par `--line` 1px (pas de zébrage coloré — trop chargé visuellement pour des tableaux financiers denses).
-- **Formulaires** : labels au-dessus des champs (jamais en placeholder seul), champs avec bordure `--line`, focus = bordure `--ink` 2px (accessibilité : jamais de focus invisible).
-- **Modales** : fond blanc, ombre discrète, largeur max 480px pour les formulaires courts, 720px pour les grilles de saisie.
-- **États vides** : toujours un texte d'action clair ("Aucun élève dans cette classe — Ajouter un élève"), jamais une illustration vide silencieuse.
+### 4.4 Tests
+Toute page destinée aux enseignants doit être testée sur une largeur d'écran réelle de téléphone (~375px), pas seulement redimensionnée depuis une fenêtre desktop.
 
 ---
 
-## 7. Ton des textes d'interface
+## 5. Reçus et bulletins — logo obligatoire
 
-- Voix active, impérative pour les boutons : "Enregistrer le paiement", pas "Soumettre".
-- Messages d'erreur factuels, jamais avec excuse : "Le montant dépasse le solde restant (12 500 FCFA)." — pas "Oups, une erreur est survenue".
-- Cohérence bouton → confirmation : un bouton "Générer le bulletin" produit un toast "Bulletin généré", pas "Opération réussie".
-- Langue : **français** dans toute l'interface (école bilingue, mais l'outil de gestion interne reste en français sauf indication contraire du principal).
+Tout document PDF généré (reçu de paiement, bulletin) doit intégrer le logo officiel en en-tête, dans le respect de sa proportion d'origine (ne pas déformer). Couleur du texte du document : `--ink` (nouveau bleu du logo), cohérent avec l'identité visuelle de l'application.
 
 ---
 
-## 8. Accessibilité minimale non négociable
+## 6. Ce qui reste inchangé de la v1
 
-- Contraste texte/fond conforme AA (vérifié : `--ink` sur `--paper` = contraste très large, `--slate` sur blanc à vérifier au montage).
-- Focus clavier toujours visible.
-- Toute action destructrice passe par une confirmation (`ConfirmDialog`), jamais d'action irréversible en un clic.
+- Style des composants (boutons rectangulaires, coins 4px, tableaux sans zébrage).
+- Ton des textes d'interface (voix active, messages d'erreur factuels).
+- Accessibilité minimale (contraste AA, focus clavier visible, confirmation avant action destructrice).

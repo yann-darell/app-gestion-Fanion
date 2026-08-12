@@ -1,298 +1,194 @@
-# CONTEXTE_ANTIGRAVITY.md
-## Application de gestion scolaire — École "Le Fanion" (Yaoundé)
+# CONTEXTE_ANTIGRAVITY.md (v2)
+## Plateforme de gestion scolaire — "Le Fanion"
 
-> **But de ce document** : c'est le contexte de référence à charger en tête de chaque session de développement dans l'agent IA. Il fixe l'architecture, les règles, les écrans, les bibliothèques et les priorités. L'agent doit s'y conformer strictement et signaler toute contradiction plutôt que d'improviser.
-
----
-
-## 1. Contexte projet
-
-- **Client** : école privée bilingue "Le Fanion", Yaoundé. Le principal est un proche du développeur — exigences transmises directement, pas de cahier des charges formel figé.
-- **Déploiement** : application de bureau, **un seul PC Windows**, fonctionnement **100% local, sans connexion internet obligatoire**.
-- **Évolution future (hors v1, à ne pas coder maintenant)** : partage en réseau local. Décision retenue : **on ne construit PAS de couche client-serveur**. Le futur partage se fera via un fichier SQLite placé dans un dossier réseau Windows partagé, avec un seul poste en écriture à la fois (verrouillage manuel/organisationnel, pas applicatif). Donc :
-  - Pas d'API HTTP, pas de serveur Express, pas de sync multi-poste à prévoir en v1.
-  - Seule précaution utile dès maintenant : ouvrir la base SQLite avec des options tolérantes à un chemin réseau (éviter les verrous agressifs, activer `journal_mode = WAL` avec prudence — WAL est déconseillé sur partage réseau SMB, donc **prévoir un mode `journal_mode = DELETE` ou `TRUNCATE` commutable** si un jour la base est déplacée sur un partage réseau). Ne pas complexifier davantage.
-
-- **3 modules v1** :
-  1. **Gestion des élèves** (fiches, classes, années scolaires)
-  2. **Gestion financière** (frais de scolarité, paiements, reçus PDF)
-  3. **Bulletins de notes** (priorité n°1 du client) — génération Word à partir du template officiel de l'école
+> Document de référence à charger en tête de chaque session de développement. Remplace la version v1 (application de bureau mono-poste). Le cahier des charges complet (PDF) fait foi pour le contexte métier ; ce document traduit ce cahier des charges en contraintes techniques actionnables pour l'agent IA.
 
 ---
 
-## 2. Stack technique (figée, ne pas dévier sans discussion explicite)
+## 1. Résumé du projet
+
+Plateforme de gestion scolaire pour un établissement bilingue à Yaoundé, composé de deux divisions strictement séparées (**Collège** et **Primaire**), accessible via une **application de bureau** (Electron, existante, adaptée) et une **plateforme web** (nouvelle, React, optimisée mobile). Les deux clients consomment la même base de données centrale hébergée sur **Supabase**.
+
+Trois utilisateurs types : **Principal(e)/Directrice** (une seule personne, accès complet aux deux divisions), **Directeur des Études (DE)** (accès complet aux deux divisions, configure matières/coefficients/attributions), **Enseignant** (accès restreint à sa/ses matière(s) et classe(s) assignée(s)).
+
+---
+
+## 2. Stack technique (figée)
 
 | Domaine | Choix | Rôle |
 |---|---|---|
-| Shell applicatif | **Electron** | packaging desktop Windows |
-| UI | **React 18 + TypeScript** | interface |
-| Build | **Vite** | dev server + bundling du renderer |
-| Base de données | **SQLite** via **better-sqlite3** | stockage local, synchrone, simple |
-| Génération PDF (reçus) | **pdf-lib** | reçus de paiement |
-| Génération Word (bulletins) | **docxtemplater** + **pizzip** | remplissage du template `.docx` officiel |
-| Packaging | **electron-builder** | exécutable Windows (.exe/installeur) |
-| Style UI | à définir en session (recommandé : CSS Modules ou Tailwind — **Tailwind conseillé** pour rapidité, pas de dépendance externe) |
-| Formulaires/validation | **react-hook-form** + **zod** (léger, TypeScript-first, pas de sur-ingénierie) |
-| Dates | **date-fns** (léger, pas moment.js) |
-| Routing interne renderer | **react-router-dom** (HashRouter obligatoire sous Electron, pas BrowserRouter) |
+| Base de données | **PostgreSQL** (via Supabase) | Stockage central, remplace SQLite |
+| Authentification | **Supabase Auth** | Comptes utilisateurs, sessions, invitation-only |
+| Permissions | **Row Level Security (RLS) PostgreSQL** | Contrôle d'accès appliqué au niveau base de données, pas seulement affichage |
+| Stockage fichiers | **Supabase Storage** | Photos élèves, reçus PDF, bulletins générés |
+| App de bureau | **Electron + React 18 + TypeScript + Vite** (existant, adapté) | Client desktop |
+| Plateforme web | **React 18 + TypeScript + Vite**, responsive mobile-first | Client web, priorité à la saisie de notes sur téléphone |
+| Client API | **@supabase/supabase-js** | Utilisé identiquement par le bureau et le web — logique métier partagée au maximum |
+| Génération PDF (reçus) | **pdf-lib** | Reçus avec logo officiel de l'école |
+| Génération bulletins | **pdf-lib** | Génération PDF directe (pas de template Word — voir §9 point 4, le tableau de notes des fichiers Word réels est une image, pas du texte gabarisable) |
+| Formulaires/validation | **react-hook-form** + **zod** | Identique v1 |
+| Style UI | **Tailwind CSS** | Identique v1, tokens mis à jour (voir DESIGN_VISUEL.md v2) |
+| Routing web | **react-router-dom** (BrowserRouter) | Web = URLs normales |
+| Routing bureau | **react-router-dom** (HashRouter, contrainte Electron inchangée) | |
 
-**Interdits explicites** : pas de framework backend HTTP, pas d'ORM lourd (Prisma/TypeORM — better-sqlite3 en accès direct suffit et reste debuggable), pas de state manager global type Redux (le state est simple : Context API + hooks suffisent), pas de dépendance cloud (auth cloud, Firebase, etc.).
-
----
-
-## 3. Architecture applicative
-
-Architecture Electron standard à 3 couches, avec **contextIsolation activée** et **aucun accès Node direct depuis le renderer** (sécurité de base même en local, pour éviter les bugs de sérialisation IPC et garder une séparation propre).
-
-```
-┌─────────────────────────────┐
-│  Renderer (React/TS/Vite)   │  UI uniquement, aucun accès fichier/DB direct
-│  - pages/, components/      │
-│  - appelle window.api.xxx() │
-└──────────────┬───────────────┘
-               │ IPC (contextBridge, canaux typés)
-┌──────────────▼───────────────┐
-│  Preload script               │  expose une API restreinte et typée
-└──────────────┬───────────────┘
-               │
-┌──────────────▼───────────────┐
-│  Main process (Node)          │
-│  - handlers IPC (ipcMain)     │
-│  - services/ (logique métier) │
-│  - repositories/ (SQL)        │
-│  - db/ (connexion, migrations)│
-│  - pdf/, docx/ (génération)   │
-└───────────────────────────────┘
-```
-
-Règle de circulation stricte : **Renderer → Preload (typé) → Main handler → Service → Repository → SQLite**. Le renderer ne connaît jamais le SQL ni les chemins de fichiers.
+**Changement fondamental par rapport à v1** : plus d'accès direct à une base SQLite locale. Toute donnée transite par l'API Supabase (HTTPS), avec authentification systématique. Aucun fonctionnement hors-ligne n'est garanti.
 
 ---
 
-## 4. Arborescence des dossiers
+## 3. Structure organisationnelle et modèle de rôles
 
-```
-le-fanion-app/
-├── electron/
-│   ├── main.ts                    # point d'entrée process main
-│   ├── preload.ts                 # contextBridge, API exposée
-│   ├── ipc/
-│   │   ├── students.handlers.ts
-│   │   ├── finance.handlers.ts
-│   │   ├── bulletins.handlers.ts
-│   │   └── system.handlers.ts     # backup, chemins, version
-│   ├── db/
-│   │   ├── connection.ts          # ouverture better-sqlite3
-│   │   ├── migrations/
-│   │   │   ├── 001_init.sql
-│   │   │   ├── 002_finance.sql
-│   │   │   └── 003_bulletins.sql
-│   │   └── migrate.ts             # runner de migrations séquentiel
-│   ├── repositories/
-│   │   ├── student.repository.ts
-│   │   ├── class.repository.ts
-│   │   ├── payment.repository.ts
-│   │   ├── grade.repository.ts
-│   │   └── subject.repository.ts
-│   ├── services/
-│   │   ├── student.service.ts
-│   │   ├── finance.service.ts     # calcul soldes, échéances
-│   │   ├── receipt.service.ts     # génération PDF (pdf-lib)
-│   │   └── bulletin.service.ts    # calcul moyennes, rangs, génération docx
-│   └── types/                     # types partagés main
-├── src/                            # renderer (React)
-│   ├── main.tsx
-│   ├── App.tsx
-│   ├── router.tsx
-│   ├── pages/
-│   │   ├── students/
-│   │   ├── finance/
-│   │   ├── bulletins/
-│   │   └── settings/
-│   ├── components/
-│   │   ├── ui/                    # composants génériques réutilisables
-│   │   ├── layout/                # Sidebar, Header, PageContainer
-│   │   ├── students/               # composants spécifiques élèves
-│   │   ├── finance/
-│   │   └── bulletins/
-│   ├── hooks/
-│   ├── context/                   # AppContext (année scolaire active, etc.)
-│   ├── api/                       # wrapper typé autour de window.api
-│   ├── types/                     # types partagés renderer (miroir de electron/types)
-│   └── styles/
-├── templates/
-│   └── bulletin_officiel.docx     # template fourni par le client (à venir)
-├── resources/                     # icônes, assets electron-builder
-├── electron-builder.yml
-├── vite.config.ts
-├── tsconfig.json
-└── CONTEXTE_ANTIGRAVITY.md        # ce fichier
-```
+Deux divisions (`College`, `Primaire`) totalement indépendantes en données. Trois rôles :
 
-**Règle de nommage** : `PascalCase` pour composants React, `camelCase` pour fonctions/variables, `snake_case` réservé aux colonnes SQL uniquement (mappées en `camelCase` dans les repositories — ne jamais laisser du snake_case fuiter jusqu'au renderer).
+| Rôle | Périmètre | Droits |
+|---|---|---|
+| `principal` | Collège + Primaire | Accès complet aux deux divisions |
+| `directeur_etudes` | Collège + Primaire | Accès complet aux deux divisions + configuration matières/coefficients/attributions enseignants |
+| `enseignant` | Matière(s) + classe(s) assignée(s) uniquement | Saisie/consultation des notes de son périmètre uniquement, aucun accès finance/élèves hors notes |
+
+**Comptes uniquement sur invitation** — jamais d'inscription publique. Le principal/DE crée le compte (email), Supabase Auth envoie un lien de définition de mot de passe.
 
 ---
 
-## 5. Modèle de données (SQLite)
-
-Schéma cible v1 (types simplifiés, à raffiner en migration SQL réelle) :
+## 4. Modèle de données (PostgreSQL)
 
 ```sql
--- Années scolaires
+-- Organisation
+divisions (id, nom)  -- 'College' / 'Primaire'
 school_years (id, label, start_date, end_date, is_active)
+classes (id, name, level, division_id, school_year_id, head_teacher_name)
 
--- Classes (ex: 6ème A, 5ème B)
-classes (id, name, level, school_year_id, apc_enabled BOOLEAN)
+-- Comptes et rôles
+profiles (id [= auth.users.id], full_name, role, division_scope)
+  -- role: 'principal' | 'directeur_etudes' | 'enseignant'
+  -- division_scope: null si accès aux deux divisions, sinon restreint (cas futur)
+
+teacher_assignments (id, teacher_id, subject_id, class_id)  -- périmètre exact d'un enseignant
 
 -- Élèves
-students (id, matricule, last_name, first_name, birth_date, gender,
-          class_id, guardian_name, guardian_phone, status, enrolled_at)
-
--- Matières
-subjects (id, name, code)
-
--- Groupes de matières (I à IV) avec coefficient par niveau de classe
-subject_groups (id, label)              -- I, II, III, IV
-class_subject_coefficients (id, class_level, subject_id, subject_group_id, coefficient)
-
--- Trimestres
-terms (id, school_year_id, label, order_index)  -- Trimestre 1/2/3
+students (id, matricule, last_name, first_name, birth_date, birth_place,
+          gender, nationality, is_repeating, class_id, guardian_name,
+          guardian_phone, status, photo_path, enrolled_at)
+  -- status: 'active' | 'inactive' | 'pending_registration' (voir règle d'activation §6)
 
 -- Notes
-grades (id, student_id, subject_id, term_id, score, appreciation_code)
-        -- appreciation_code = CMA / CNA / CA (légende à confirmer)
-
--- Compétences APC (pour niveaux en évaluation par compétences)
-competencies (id, subject_id, label)
-competency_grades (id, student_id, competency_id, term_id, level_achieved)
+subjects (id, name, division_id)
+subject_groups (id, label)  -- I à IV
+class_subject_coefficients (id, class_id, subject_id, subject_group_id, coefficient)
+terms (id, school_year_id, label, order_index)  -- trimestres
+sequences (id, term_id, label, order_index)  -- 2 séquences par trimestre
+grades (id, student_id, subject_id, sequence_id, score, appreciation_code)
+competencies (id, subject_id, label)  -- niveaux APC
+competency_grades (id, student_id, competency_id, sequence_id, level_achieved)
+bulletin_generations (id, student_id, term_id, generated_at, docx_path, pdf_path)
 
 -- Finance
-fee_schedules (id, class_id, school_year_id, total_amount, installments_json)
-payments (id, student_id, school_year_id, amount, payment_date, method, receipt_number)
+fee_schedules (id, class_id, school_year_id, registration_fee, total_amount, installments_json)
+  -- installments_json : [{label, amount, due_date}, ...] dans l'ordre officiel
+student_fee_overrides (id, student_id, school_year_id, total_amount_override, reason, created_at)
+payments (id, student_id, school_year_id, amount, payment_date, method, receipt_number,
+          tranche_ciblee)  -- calculé automatiquement, voir §6
 receipts (id, payment_id, pdf_path, generated_at)
+receipt_counters (id, next_value)  -- séquence jamais réutilisée
 
--- Bulletins générés (traçabilité)
-bulletin_generations (id, student_id, term_id, generated_at, docx_path, pdf_path)
+-- Fournitures
+supply_requirements (id, division_id, school_year_id, label, mode)  -- mode: 'physique' | 'monetaire'
+student_supplies (id, student_id, supply_requirement_id, school_year_id, status)  -- 'donne' | 'manquant'
 ```
 
-Points structurants :
-- **Un élève appartient à une classe pour une année scolaire donnée** → si un élève redouble ou change de classe, on garde l'historique (table de liaison `student_class_history` à ajouter si besoin réel, ne pas sur-anticiper en v1).
-- Les coefficients sont **rattachés au niveau de classe**, pas à la classe elle-même (6ème A et 6ème B partagent les mêmes coefficients) — confirmé par l'analyse des bulletins PDF fournis.
-- Les moyennes et rangs **ne sont jamais stockés en dur** : ils sont **recalculés à la génération du bulletin** à partir des notes brutes, pour éviter toute désynchronisation. Seule la génération elle-même (le fichier produit) est tracée dans `bulletin_generations`.
+**Séparation des divisions** : chaque table métier porte (directement ou via sa classe) un `division_id`. Les policies RLS (voir `SECURITE.md`) filtrent automatiquement selon le rôle et la division de l'utilisateur connecté — **jamais de filtre uniquement côté application**.
 
 ---
 
-## 6. Contrat IPC (canaux exposés par le preload)
+## 5. Règles métier confirmées (issues de l'analyse des bulletins réels et du cahier des charges validé)
 
-Convention de nommage : `domaine:action`. Tous les handlers retournent soit `{ ok: true, data }` soit `{ ok: false, error }` — **jamais d'exception non gérée traversant l'IPC**.
+- **Moyenne de séquence** = `Σ(note × coefficient) / Σ(coefficient)` sur toutes les matières globalement (confirmé par calcul sur bulletins réels).
+- **Moyenne trimestrielle** — **CONFIRMÉE**, extraite des formules réelles du classeur Excel de production de l'école (fichier "BORDEREAU et BULLETIN 6ème") :
+  ```
+  Pour chaque matière : score_trimestre = (score_séquence1 + score_séquence2) / 2
+  moyenne_trimestre = Σ(score_trimestre_matière × coefficient) / Σ(coefficient), sur toutes les matières
+  ```
+  Vérifiée numériquement sur un élève réel (ONANINA, 6ème) : résultat exact `13,2155...` → arrondi affiché `13,22`, cohérent avec le bulletin PDF déjà analysé.
+- **Barème lettre — CONFIRMÉ** (formule Excel exacte, plus seulement déduit par recoupement) :
+  `< 10 → D | 10–11,99 → C | 12–13,99 → C+ | 14–14,99 → B | 15–15,99 → B+ | 16–17,99 → A | 18–20 → A+`
+- **Codes d'appréciation — CONFIRMÉS**, calculés automatiquement à partir de la moyenne trimestrielle (formule Excel exacte) :
+  `< 10 → CNA | 10–11,99 → CMA | 12–13,99 → CA | 14–15,99 → CBA | 16–20 → CTBA`
+  (2 codes de plus que ce qu'on avait identifié sur les PDF seuls : CBA et CTBA existent aussi.)
+- **Rang — périmètre CONFIRMÉ** : calculé uniquement sur les élèves ayant une moyenne renseignée (les élèves sans note sont exclus du classement, `RANK` sur la colonne des moyennes). Le dénominateur affiché ("1er/08") correspond au nombre d'élèves **notés**, pas à l'effectif total de la classe — confirmé par comparaison avec le bulletin PDF officiel (effectif 12, classement sur 8). Toujours recalculé à la génération, jamais stocké.
+- **Moyenne de groupe** (par groupe I à IV) : `Σ(score_trimestre_matière × coefficient) / Σ(coefficient)` restreint aux matières du groupe — déjà notre hypothèse v1, confirmée.
+
+---
+
+## 6. Règles métier Finance (nouvelles, v2)
+
+### 6.1 Répartition automatique des paiements par tranche
+
+Tout paiement (hors inscription) est **alloué automatiquement à la première tranche non complétée**, dans l'ordre défini par `installments_json`. Un dépassement devient une avance sur la tranche suivante.
 
 ```
-students:list / students:get / students:create / students:update / students:delete
-classes:list / classes:create
-finance:getBalance(studentId) / finance:recordPayment / finance:generateReceipt
-bulletins:computeAverages(classId, termId)   # calcul à blanc, sans génération de fichier
-bulletins:generate(studentId, termId)        # génère le .docx (et PDF si demandé)
-bulletins:generateForClass(classId, termId)  # génération en masse
-system:pickBackupFolder / system:runBackup / system:getAppVersion
+fonction allouerPaiement(eleve, montant):
+  tranches = tranches de la classe de l'eleve, dans l'ordre
+  reste = montant
+  pour chaque tranche non completee (dans l'ordre):
+    combler cette tranche avec min(reste, montant_manquant_tranche)
+    reste -= montant_comble
+    si reste == 0: arrêter
+  si reste > 0 après la dernière tranche: excédent affiché comme avance globale
 ```
 
-Chaque canal a un type de requête/réponse défini dans `types/ipc.ts`, partagé (via chemin relatif ou duplication contrôlée) entre `electron/` et `src/`.
+Cette fonction doit être **centralisée en un seul endroit** (service), jamais dupliquée.
+
+### 6.2 Règle d'activation par inscription (hypothèse de travail, non figée)
+
+Un élève est `status = 'pending_registration'` tant que les frais d'inscription ne sont pas intégralement payés, `status = 'active'` une fois payés. **Conséquences exactes non confirmées** (peut-il être rattaché à une classe/avoir des notes avant activation ?) — À valider avec le DE et la Principale avant implémentation définitive. Coder cette règle de façon isolée et documentée comme hypothèse.
+
+### 6.3 Frais d'inscription jamais réduits individuellement
+
+`student_fee_overrides` ne s'applique qu'à `total_amount` (scolarité), jamais à `registration_fee`.
+
+### 6.4 Reçus
+
+PDF généré via `pdf-lib`, doit intégrer le **logo officiel de l'école** (fichier fourni, à stocker dans le projet), numérotation strictement séquentielle via `receipt_counters`, jamais réutilisée même après suppression d'un paiement.
 
 ---
 
-## 7. Règles métier
+## 7. Fournitures — double mode
 
-### 7.1 Élèves
-- Matricule unique par élève, généré ou saisi manuellement (à trancher — proposer une génération automatique `ANNEE-CLASSE-SEQ` par défaut, modifiable).
-- Un élève est rattaché à une classe et une année scolaire active.
-
-### 7.2 Finance
-- Un `fee_schedule` définit le montant total dû par classe/année, avec un échéancier (tranches).
-- Chaque paiement génère un reçu PDF (numéroté séquentiellement, non modifiable après génération — traçabilité).
-- Le solde d'un élève = total dû − somme des paiements enregistrés.
-
-### 7.3 Bulletins (module prioritaire) — état des lieux
-
-**Confirmé par l'analyse des bulletins PDF (6ème, 5ème, 3ème, 2nde, 1ère)** :
-- Matières groupées en **4 groupes (I à IV)**, coefficients définis par niveau de classe.
-- Certains niveaux utilisent l'**évaluation par compétences (APC)** en plus/à la place de la notation chiffrée classique.
-- Les **rangs et moyennes de classe nécessitent que toutes les notes de tous les élèves de la classe soient saisies** avant génération — le système doit bloquer ou avertir si des notes manquent.
-
-**⚠️ 3 questions bloquantes non résolues — ne pas coder la logique de calcul tant qu'elles ne sont pas tranchées par le principal :**
-1. **Formule exacte de la moyenne trimestrielle** — confirmée non-arithmétique (donc pas une simple moyenne pondérée par coefficient), mais formule précise inconnue.
-2. **Périmètre du classement** — sur les seuls élèves notés dans la matière/le trimestre, ou sur l'effectif complet de la classe ?
-3. **Légende des codes d'appréciation du travail** (CMA / CNA / CA) — signification exacte à confirmer pour affichage correct sur le bulletin.
-
-**Directive à l'agent IA** : implémenter la saisie des notes, le stockage, et l'intégration du template docx **peuvent avancer dès maintenant**. La **fonction de calcul de moyenne/rang doit être isolée dans une seule fonction pure et clairement marquée `// TODO: formule à confirmer avec le client`**, avec une implémentation provisoire (moyenne pondérée simple) explicitement documentée comme temporaire, pour ne pas bloquer le reste du développement.
+- `mode = 'physique'` → suivi par élève via `student_supplies` (donné/manquant), aucun lien avec le module Finance.
+- `mode = 'monetaire'` → aucune ligne dans `student_supplies` ; le montant est directement intégré dans `fee_schedules` de la classe concernée, suit le circuit de paiement normal.
 
 ---
 
-## 8. Cartographie des écrans (v1)
+## 8. Contraintes non négociables (rappel du cahier des charges)
 
-| Écran | Route | Contenu |
-|---|---|---|
-| Tableau de bord | `/` | Résumé : effectifs, paiements du jour, bulletins en attente |
-| Liste des élèves | `/students` | Table filtrable par classe, recherche |
-| Fiche élève | `/students/:id` | Infos, historique paiements, notes, actions |
-| Nouvelle inscription | `/students/new` | Formulaire création |
-| Gestion des classes | `/classes` | Liste classes, coefficients par niveau |
-| Finance — Vue élève | `/finance/:studentId` | Solde, échéancier, historique, bouton "Enregistrer un paiement" |
-| Finance — Vue d'ensemble | `/finance` | Liste des soldes par classe, relances impayés |
-| Saisie des notes | `/grades/:classId/:termId` | Grille de saisie par matière, tous élèves de la classe |
-| Génération bulletins | `/bulletins/:classId/:termId` | Statut de complétude des notes, bouton génération individuelle/masse |
-| Paramètres | `/settings` | Année scolaire active, sauvegarde/restauration DB, template bulletin |
+1. Connexion internet requise (assumé, pas de mode hors-ligne).
+2. Séparation stricte des divisions — appliquée en base (RLS), pas juste en façade.
+3. Permissions enseignant vérifiées en base, pas seulement à l'écran.
+4. Traçabilité financière : numérotation de reçus jamais réutilisée.
+5. Cohérence fichier/base : jamais de fichier orphelin (photo, PDF) sans référence, ni de référence sans fichier.
+6. Une seule identité visuelle (logo officiel, une charte) dans toute la plateforme, quelle que soit la division.
+7. Interface web adaptative mobile, priorité sur la saisie de notes par les enseignants.
+8. Comptes uniquement sur invitation — jamais d'inscription publique (détails dans `SECURITE.md`).
 
 ---
 
-## 9. Composants réutilisables (design system léger)
+## 9. Questions ouvertes restantes
 
-À construire dans `src/components/ui/` en tout premier, avant les pages :
+~~Formule séquence → trimestre~~, ~~périmètre du classement~~, ~~codes CMA/CNA/CA~~, ~~barème lettre~~ : **résolues** par l'analyse des fichiers Excel de production réels (banque de bulletins fournie par le client). Voir §5.
 
-- `Button`, `IconButton`
-- `Input`, `Select`, `DatePicker`, `NumberInput`
-- `Table` (avec tri, pagination simple — pas de librairie lourde type react-table sauf besoin avéré)
-- `Modal`, `ConfirmDialog`
-- `Badge` (statuts : payé/partiel/impayé, notes complètes/incomplètes)
-- `Toast` (retours succès/erreur après actions IPC)
-- `PageHeader`, `PageContainer`, `Sidebar`, `EmptyState`, `LoadingSpinner`
+Restent réellement ouvertes :
+1. Niveau de détail attendu pour les états financiers (simples totaux ou document exportable détaillé).
+2. Conséquences précises du statut `pending_registration` (§6.2).
+3. Signification exacte en toutes lettres des acronymes CNA/CMA/CA/CBA/CTBA (les seuils numériques sont confirmés, l'intitulé complet reste à valider avec le client pour affichage correct).
+4. ~~Approche de génération (Word vs Excel natif)~~ — **résolue par inspection technique directe**. Les fichiers Word réels contiennent un en-tête en texte éditable (identité élève, mail-merge classique, exploitable par `docxtemplater`), mais le **tableau de notes est une image collée depuis Excel** (capture plein format, pas du texte/tableau Word). `docxtemplater` ne peut pas remplir dynamiquement une image. **Décision technique** : abandonner l'approche "remplir le fichier Word existant", générer le bulletin directement en PDF (via `pdf-lib` ou génération HTML→PDF) en reproduisant fidèlement la mise en page déjà confirmée sur les bulletins PDF officiels analysés (en-tête, tableau par groupe de matières, moyennes, rang, décisions). C'est plus robuste et donne un contrôle total sur le rendu.
 
-Règle : **aucune page ne doit contenir de style ad hoc dupliqué** — tout élément visuel répété (carte élève, ligne de tableau de paiement, etc.) devient un composant dans le dossier du module concerné (`components/students/`, `components/finance/`...).
+## 10. Structure du "Bordereau" (nouveau, ajout demandé par le client)
 
----
+Les fichiers réels de l'école confirment un besoin déjà présent dans leur usage actuel : pour chaque classe, un **bordereau** récapitulatif (liste de tous les élèves, leurs notes par matière, moyenne, rang) distinct des bulletins individuels. Structure observée dans le classeur réel :
+- Une feuille de saisie brute par séquence (une ligne par élève, une colonne par matière, aucune formule — juste les notes tapées).
+- Une feuille "BORDEREAU" qui reprend les moyennes déjà calculées (collées en valeur, pas en formule live) et calcule le rang de classe (`RANK` sur la colonne des moyennes) et une moyenne générale de classe par matière.
+- Une feuille par élève avec le détail complet (bulletin individuel), formules de calcul incluses.
 
-## 10. Conventions de code
-
-- TypeScript strict (`strict: true`), pas de `any` sauf frontière IPC brute justifiée.
-- Validation des entrées utilisateur avec `zod`, au plus près du formulaire (renderer) **et** revalidation côté service (main) avant écriture DB — ne jamais faire confiance au renderer seul.
-- Toute écriture DB multi-tables passe par une transaction `better-sqlite3` (`db.transaction(...)`).
-- Erreurs métier = classes d'erreur typées (`InsufficientDataError`, `DuplicateMatriculeError`...) interceptées au niveau du handler IPC et traduites en message utilisateur clair.
-- Pas de logique métier dans les composants React — les pages orchestrent, les hooks/services encapsulent la logique.
-
----
-
-## 11. Sécurité & robustesse (contexte local mais sérieux)
-
-- `contextIsolation: true`, `nodeIntegration: false` dans `BrowserWindow`.
-- Sauvegarde de la base : fonction "Exporter une sauvegarde" copiant le fichier `.sqlite` vers un dossier choisi par l'utilisateur (bouton dans Paramètres), à faire tôt car c'est la seule protection contre la perte de données sur un poste unique.
-- Numérotation des reçus et bulletins : séquentielle et non réutilisable, même en cas d'erreur/annulation (traçabilité comptable).
-
----
-
-## 12. Ordre d'implémentation recommandé
-
-1. Scaffolding DB + migrations (schéma section 5) + connexion main process
-2. Design system minimal (section 9) + layout (Sidebar/Router)
-3. Module Élèves (CRUD complet) — valide toute la chaîne IPC de bout en bout
-4. Module Bulletins — saisie des notes + intégration template docx dès réception (priorité client), avec formule de moyenne provisoire clairement marquée TODO
-5. Module Finance — paiements + reçus PDF
-6. Tableau de bord + Paramètres (sauvegarde DB)
-
----
-
-## 13. Questions ouvertes à trancher avec le principal (rappel, bloquant pour le calcul des bulletins)
-
-1. Formule exacte de la moyenne trimestrielle (non-arithmétique, formule précise manquante).
-2. Périmètre du classement : élèves notés uniquement, ou effectif complet de la classe.
-3. Légende des codes CMA / CNA / CA.
-
-Tant que ces réponses ne sont pas obtenues, ne pas figer la fonction de calcul de moyenne/rang en dur dans plusieurs endroits du code — la garder centralisée pour un remplacement en un seul point.
+**Fonctionnalité à ajouter au périmètre** (module Gestion des notes) :
+- Écran "Bordereau de classe" : tableau de tous les élèves d'une classe/séquence/trimestre avec leurs notes par matière, moyenne, rang.
+- **Classement** : liste triée par rang, sur les élèves notés uniquement (règle confirmée §5).
+- **Graphique des moyennes** : représentation visuelle de la distribution des moyennes de la classe (ex. histogramme), à intégrer à l'écran Bordereau — nouveauté demandée par le client, non présente dans le cahier des charges initial, à ajouter au listing de fonctionnalités.

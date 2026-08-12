@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #FAF9F5;
+  color: #150A5E;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: "Source Serif 4", serif;
+}
+
+.font-mono-data {
+  font-family: "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}

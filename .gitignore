@@ -4,3 +4,10 @@ dist-electron/
 release/
 *.sqlite
 *.sqlite-journal
+.env
+.env.local
+.env.*.local
+.tsbuildinfo
+packages/*/dist/
+packages/*/dist-electron/
+packages/*/release/
