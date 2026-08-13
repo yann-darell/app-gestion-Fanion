@@ -211,7 +211,6 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             </label>
             <select
               className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              error={errors.division_id?.message}
               {...register("division_id")}
             >
               {divisions.map((div) => (
@@ -233,7 +232,6 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             </label>
             <select
               className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              error={errors.school_year_id?.message}
               {...register("school_year_id")}
             >
               <option value="">Sélectionnez une année...</option>
@@ -266,7 +264,7 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             >
               Annuler
             </Button>
-            <Button type="submit" loading={isSubmitting}>
+            <Button type="submit" isLoading={isSubmitting}>
               Enregistrer
             </Button>
           </div>
