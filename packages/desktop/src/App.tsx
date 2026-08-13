@@ -1,24 +1,15 @@
 import React, { useState, useEffect } from "react";
+import { HashRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { supabase } from "@fanion/shared";
+import Sidebar from "./components/layout/Sidebar";
+import Header from "./components/layout/Header";
+import ClassesPage from "./pages/classes/ClassesPage";
 
 type Profile = {
   id: string;
   full_name: string;
   role: string;
   division_scope?: string | null;
-};
-
-type Division = {
-  id: string;
-  nom: string;
-};
-
-type SchoolYear = {
-  id: string;
-  label: string;
-  start_date: string;
-  end_date: string;
-  is_active: boolean;
 };
 
 export default function App() {
@@ -28,14 +19,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Données métier récupérées
+  // User Profile
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [divisions, setDivisions] = useState<Division[]>([]);
-  const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   useEffect(() => {
-    // Écouter les changements d'état de session Supabase
+    // Listen to Supabase auth state changes
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -51,20 +40,17 @@ export default function App() {
 
   useEffect(() => {
     if (session?.user) {
-      fetchUserData();
+      fetchUserProfile();
     } else {
       setProfile(null);
-      setDivisions([]);
-      setSchoolYears([]);
     }
   }, [session]);
 
-  const fetchUserData = async () => {
+  const fetchUserProfile = async () => {
     try {
-      setLoadingData(true);
+      setLoadingProfile(true);
       setError(null);
 
-      // 1. Charger le profil de l'utilisateur connecté
       const { data: profileData, error: profileErr } = await supabase
         .from("profiles")
         .select("*")
@@ -73,28 +59,11 @@ export default function App() {
 
       if (profileErr) throw profileErr;
       setProfile(profileData);
-
-      // 2. Charger les divisions (vérification RLS)
-      const { data: divisionsData, error: divisionsErr } = await supabase
-        .from("divisions")
-        .select("*");
-
-      if (divisionsErr) throw divisionsErr;
-      setDivisions(divisionsData || []);
-
-      // 3. Charger les années scolaires (vérification RLS)
-      const { data: schoolYearsData, error: schoolYearsErr } = await supabase
-        .from("school_years")
-        .select("*");
-
-      if (schoolYearsErr) throw schoolYearsErr;
-      setSchoolYears(schoolYearsData || []);
-
     } catch (err: any) {
-      console.error("Erreur lors de la récupération des données :", err);
-      setError(err.message || "Erreur de chargement des données sécurisées RLS.");
+      console.error("Erreur lors de la récupération du profil :", err);
+      setError("Erreur de chargement du profil utilisateur.");
     } finally {
-      setLoadingData(false);
+      setLoadingProfile(false);
     }
   };
 
@@ -128,27 +97,27 @@ export default function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#FAF9F5] text-[#150A5E] font-sans flex flex-col justify-between">
-      {/* Header */}
-      <header className="border-b border-[#E4E0D6] bg-white py-4 px-6 shadow-sm">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[#150A5E] flex items-center justify-center text-white font-display font-bold text-lg">
-              F
+  if (!session) {
+    /* Login Screen */
+    return (
+      <div className="min-h-screen bg-[#FAF9F5] text-[#150A5E] font-sans flex flex-col justify-between">
+        {/* Header */}
+        <header className="border-b border-[#E4E0D6] bg-white py-4 px-6 shadow-sm flex-shrink-0">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded bg-[#150A5E] flex items-center justify-center text-white font-display font-bold text-lg">
+                F
+              </div>
+              <h1 className="text-xl font-display font-bold tracking-tight">Le Fanion v2</h1>
             </div>
-            <h1 className="text-xl font-display font-bold tracking-tight">Le Fanion v2</h1>
+            <span className="text-xs px-2.5 py-1 rounded bg-[#150A5E] text-white font-semibold tracking-wider uppercase">
+              Desktop Portal
+            </span>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded bg-[#150A5E] text-white font-semibold tracking-wider uppercase">
-            Desktop Portal
-          </span>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="flex-grow flex items-center justify-center p-4">
-        {!session ? (
-          /* Écran de Connexion */
+        {/* Main Content */}
+        <main className="flex-grow flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white border border-[#E4E0D6] rounded p-8 shadow-sm">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-display font-bold mb-1">Portail d'Accès Bureau</h2>
@@ -156,7 +125,7 @@ export default function App() {
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-[#B3432E] text-[#B3432E] text-sm rounded">
+              <div className="mb-4 p-3 bg-red-50 border border-[#B3432E] text-[#B3432E] text-sm rounded font-medium">
                 {error}
               </div>
             )}
@@ -199,106 +168,56 @@ export default function App() {
               </button>
             </form>
           </div>
-        ) : (
-          /* Écran Session Active */
-          <div className="w-full max-w-2xl bg-white border border-[#E4E0D6] rounded p-8 shadow-sm space-y-6">
-            <div className="flex justify-between items-start border-b border-[#E4E0D6] pb-4">
-              <div>
-                <p className="text-xs font-semibold text-slate uppercase">Utilisateur connecté (Desktop)</p>
-                <h2 className="text-2xl font-display font-bold">
-                  {profile?.full_name || session.user.email}
-                </h2>
-                <p className="text-xs text-slate mt-1">
-                  ID Auth: <span className="font-mono text-[10px]">{session.user.id}</span>
-                </p>
-              </div>
-              <button
-                onClick={handleLogout}
-                disabled={loading}
-                className="px-3 py-1.5 border border-[#B3432E] text-[#B3432E] hover:bg-red-50 rounded text-xs font-semibold transition disabled:opacity-50"
-              >
-                Déconnexion
-              </button>
+        </main>
+
+        {/* Footer */}
+        <footer className="border-t border-[#E4E0D6] py-3 text-center text-xs text-slate bg-white flex-shrink-0">
+          Collège Privé Bilingue Le Fanion — &copy; {new Date().getFullYear()} — Yaoundé, Cameroun
+        </footer>
+      </div>
+    );
+  }
+
+  // Layout wrapper component
+  const MainLayout = () => (
+    <div className="flex h-screen w-screen overflow-hidden bg-paper text-ink">
+      <Sidebar />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header 
+          userFullName={profile?.full_name} 
+          userRole={profile?.role} 
+          onLogout={handleLogout} 
+        />
+        <main className="flex-1 overflow-y-auto">
+          {loadingProfile ? (
+            <div className="py-12 text-center text-slate font-medium text-sm">
+              Chargement du profil...
             </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 border border-[#B3432E] text-[#B3432E] text-sm rounded">
-                {error}
-              </div>
-            )}
-
-            {loadingData ? (
-              <div className="text-center py-6 text-sm text-slate">Chargement des données sécurisées...</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Rôle & Division Scope */}
-                <div className="space-y-3 bg-[#FAF9F5] p-4 rounded border border-[#E4E0D6]">
-                  <h3 className="font-display font-semibold text-base border-b border-[#E4E0D6] pb-1.5">
-                    Habilitations (Profil)
-                  </h3>
-                  <div className="text-sm space-y-1">
-                    <p>
-                      <strong className="text-slate">Rôle :</strong>{" "}
-                      <span className="px-2 py-0.5 rounded text-xs bg-[#1E7A4C] text-white font-semibold capitalize">
-                        {profile?.role || "Non défini"}
-                      </span>
-                    </p>
-                    <p>
-                      <strong className="text-slate">Périmètre Division :</strong>{" "}
-                      <span className="capitalize">
-                        {profile?.division_scope || "Accès global (Collège + Primaire)"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Année Scolaire Active */}
-                <div className="space-y-3 bg-[#FAF9F5] p-4 rounded border border-[#E4E0D6]">
-                  <h3 className="font-display font-semibold text-base border-b border-[#E4E0D6] pb-1.5">
-                    Année Scolaire Active
-                  </h3>
-                  {schoolYears.length > 0 ? (
-                    schoolYears.map((sy) => (
-                      <div key={sy.id} className="text-sm">
-                        <p className="font-bold text-[#1E7A4C]">{sy.label} (Active)</p>
-                        <p className="text-xs text-slate">
-                          Début: {sy.start_date} | Fin: {sy.end_date}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-[#B3432E]">Aucune année active trouvée en base.</p>
-                  )}
-                </div>
-
-                {/* Divisions Visibles */}
-                <div className="md:col-span-2 space-y-3 bg-[#FAF9F5] p-4 rounded border border-[#E4E0D6]">
-                  <h3 className="font-display font-semibold text-base border-b border-[#E4E0D6] pb-1.5">
-                    Divisions configurées (Lecture RLS)
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {divisions.length > 0 ? (
-                      divisions.map((div) => (
-                        <div key={div.id} className="p-3 bg-white border border-[#E4E0D6] rounded shadow-sm">
-                          <p className="text-xs text-slate font-mono">Code: {div.id}</p>
-                          <p className="font-semibold text-sm mt-1">{div.nom}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate col-span-2">Aucune division visible.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-[#E4E0D6] py-3 text-center text-xs text-slate bg-white">
-        Collège Privé Bilingue Le Fanion — &copy; {new Date().getFullYear()} — Yaoundé, Cameroun
-      </footer>
+          ) : (
+            <Outlet />
+          )}
+        </main>
+      </div>
     </div>
+  );
+
+  /* Authenticated Router */
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Navigate to="/classes" replace />} />
+          <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
+          
+          {/* Fallback mock routes to avoid breaking links */}
+          <Route path="students" element={<div className="p-6"><h2 className="text-2xl font-bold">Élèves</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+          <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold">Bulletins & Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+          <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold">Finance & Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+          <Route path="settings" element={<div className="p-6"><h2 className="text-2xl font-bold">Paramètres</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+          
+          <Route path="*" element={<Navigate to="/classes" replace />} />
+        </Route>
+      </Routes>
+    </HashRouter>
   );
 }

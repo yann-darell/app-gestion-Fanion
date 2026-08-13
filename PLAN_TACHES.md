@@ -20,7 +20,19 @@
 
 ---
 
-## Lot B — Élèves
+## Lot B — Gestion des classes
+
+- [ ] Vérifier/compléter la table `classes` existante (créée au Lot A) — colonnes déjà présentes : `name`, `level`, `division_id`, `school_year_id`, `head_teacher_name`
+- [ ] Policies RLS : lecture pour tout utilisateur authentifié, écriture réservée `principal`/`directeur_etudes` (déjà posées au Lot A — vérifier qu'elles couvrent bien create/update/delete)
+- [ ] Client API (`packages/shared/api/classes.ts`) partagé bureau/web
+- [ ] Écran "Gestion des classes" : liste des classes par division, création, modification, (pas de suppression physique si des élèves y sont rattachés — cohérent avec la règle de soft-delete du projet)
+- [ ] Formulaire de création : nom, niveau, division, année scolaire (celle active par défaut), professeur principal (texte libre pour l'instant, pourra devenir une vraie référence vers un compte enseignant plus tard)
+
+**Vérification** : créer au moins une classe par division (ex : "6ème A" en Collège, "CM2 A" en Primaire) avec le compte `principal`, confirmer qu'un compte `enseignant` peut les lire mais pas en créer/modifier une nouvelle.
+
+---
+
+## Lot C — Élèves
 
 - [ ] Migration `students` + policies RLS (lecture/écriture réservée `principal`/`directeur_etudes`)
 - [ ] Bucket Supabase Storage pour les photos, avec policy d'accès par division
@@ -33,7 +45,7 @@
 
 ---
 
-## Lot C — Gestion des notes
+## Lot D — Gestion des notes
 
 - [ ] Migrations `subjects`, `subject_groups`, `class_subject_coefficients`, `terms`, `sequences`, `teacher_assignments`, `grades`
 - [ ] Policies RLS strictes sur `grades` (voir `SECURITE.md` §3.2) — **priorité absolue de ce lot**
@@ -52,7 +64,7 @@
 
 ---
 
-## Lot D — Bulletins
+## Lot E — Bulletins
 
 - [x] ~~Décider de l'approche de génération~~ — **tranché** : les fichiers Word réels contiennent le tableau de notes comme image collée depuis Excel (pas de texte éditable), `docxtemplater` n'est donc pas viable pour cette partie. Génération directe en PDF (via `pdf-lib`), reproduisant la mise en page des bulletins PDF officiels déjà analysés. Voir `CONTEXTE_ANTIGRAVITY.md` §9 point 4.
 - [ ] Migration `bulletin_generations`
@@ -66,7 +78,7 @@
 
 ---
 
-## Lot E — Finance (révisée v2)
+## Lot F — Finance (révisée v2)
 
 - [ ] Migrations `fee_schedules` (avec `registration_fee`), `student_fee_overrides`, `payments`, `receipts`, `receipt_counters`
 - [ ] Fonction centralisée d'allocation par tranche (`CONTEXTE_ANTIGRAVITY.md` §6.1) — **à tester unitairement avant intégration UI**
@@ -81,7 +93,7 @@
 
 ---
 
-## Lot F — Fournitures
+## Lot G — Fournitures
 
 - [ ] Migrations `supply_requirements`, `student_supplies`
 - [ ] Écran de configuration (définir si une fourniture est physique ou monétaire, par division)
@@ -92,9 +104,9 @@
 
 ---
 
-## Lot G — Web responsive complet
+## Lot H — Web responsive complet
 
-- [ ] Audit mobile de toutes les pages déjà construites (surtout saisie de notes, lot C)
+- [ ] Audit mobile de toutes les pages déjà construites (surtout saisie de notes, lot D)
 - [ ] Ajustement des layouts non encore mobile-first
 - [ ] Test réel sur téléphone (pas seulement redimensionnement de fenêtre desktop)
 
