@@ -4,6 +4,8 @@ import { supabase } from "@fanion/shared";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
+import StudentsPage from "./pages/students/StudentsPage";
+import StudentDetailPage from "./pages/students/StudentDetailPage";
 
 type Profile = {
   id: string;
@@ -19,10 +21,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // User Profile
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
-  /* ── Auth listener ── */
+  // Check auth session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -37,6 +40,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch profile when session changes
   useEffect(() => {
     if (session?.user) {
       fetchUserProfile();
@@ -54,11 +58,12 @@ export default function App() {
         .select("*")
         .eq("id", session.user.id)
         .single();
+
       if (err) throw err;
       setProfile(data);
     } catch (err: any) {
       console.error("Erreur profil:", err);
-      setError("Erreur de chargement du profil.");
+      setError("Erreur lors du chargement du profil.");
     } finally {
       setLoadingProfile(false);
     }
@@ -67,6 +72,7 @@ export default function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -74,6 +80,7 @@ export default function App() {
         email,
         password,
       });
+
       if (loginErr) throw loginErr;
     } catch (err: any) {
       setError(err.message || "Identifiants invalides.");
@@ -109,7 +116,7 @@ export default function App() {
                 Le Fanion v2
               </h1>
             </div>
-            <span className="text-xs px-2.5 py-1 rounded bg-paper-dark font-semibold text-slate tracking-wider uppercase">
+            <span className="text-xs px-2.5 py-1 rounded bg-ink text-white font-semibold tracking-wider uppercase">
               Web Portal
             </span>
           </div>
@@ -119,15 +126,15 @@ export default function App() {
           <div className="w-full max-w-md bg-white border border-line rounded p-8 shadow-sm">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-display font-bold mb-1">
-                Portail d'Accès
+                Portail Web Mobile
               </h2>
               <p className="text-sm text-slate">
-                Connectez-vous pour accéder à l'application
+                Connectez-vous pour accéder à votre espace
               </p>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-signal-red text-signal-red text-sm rounded font-medium">
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded font-medium">
                 {error}
               </div>
             )}
@@ -219,24 +226,21 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/classes" replace />} />
+          <Route index element={<Navigate to="/students" replace />} />
           <Route
             path="classes"
             element={<ClassesPage userRole={profile?.role} />}
           />
-
-          {/* Placeholder routes for future modules */}
           <Route
             path="students"
-            element={
-              <div className="p-6">
-                <h2 className="text-2xl font-bold font-display">Élèves</h2>
-                <p className="text-slate mt-2">
-                  Module en cours de migration…
-                </p>
-              </div>
-            }
+            element={<StudentsPage userRole={profile?.role} />}
           />
+          <Route
+            path="students/:id"
+            element={<StudentDetailPage userRole={profile?.role} />}
+          />
+
+          {/* Placeholder routes for future modules */}
           <Route
             path="grades"
             element={
@@ -277,7 +281,7 @@ export default function App() {
             }
           />
 
-          <Route path="*" element={<Navigate to="/classes" replace />} />
+          <Route path="*" element={<Navigate to="/students" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

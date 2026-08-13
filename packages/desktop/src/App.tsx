@@ -4,6 +4,8 @@ import { supabase } from "@fanion/shared";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
+import StudentsPage from "./pages/students/StudentsPage";
+import StudentDetailPage from "./pages/students/StudentDetailPage";
 
 type Profile = {
   id: string;
@@ -23,8 +25,8 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
 
+  // Check auth session
   useEffect(() => {
-    // Listen to Supabase auth state changes
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -38,6 +40,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch profile when session changes
   useEffect(() => {
     if (session?.user) {
       fetchUserProfile();
@@ -50,18 +53,17 @@ export default function App() {
     try {
       setLoadingProfile(true);
       setError(null);
-
-      const { data: profileData, error: profileErr } = await supabase
+      const { data, error: err } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", session.user.id)
         .single();
 
-      if (profileErr) throw profileErr;
-      setProfile(profileData);
+      if (err) throw err;
+      setProfile(data);
     } catch (err: any) {
-      console.error("Erreur lors de la récupération du profil :", err);
-      setError("Erreur de chargement du profil utilisateur.");
+      console.error("Erreur profil:", err);
+      setError("Erreur lors du chargement du profil.");
     } finally {
       setLoadingProfile(false);
     }
@@ -78,6 +80,7 @@ export default function App() {
         email,
         password,
       });
+
       if (loginErr) throw loginErr;
     } catch (err: any) {
       setError(err.message || "Identifiants invalides.");
@@ -97,10 +100,10 @@ export default function App() {
     }
   };
 
+  // If not logged in, render Login screen
   if (!session) {
-    /* Login Screen */
     return (
-      <div className="min-h-screen bg-[#FAF9F5] text-[#150A5E] font-sans flex flex-col justify-between">
+      <div className="min-h-screen bg-paper text-ink font-sans flex flex-col justify-between">
         {/* Header */}
         <header className="border-b border-[#E4E0D6] bg-white py-4 px-6 shadow-sm flex-shrink-0">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -206,16 +209,16 @@ export default function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/classes" replace />} />
+          <Route index element={<Navigate to="/students" replace />} />
           <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
+          <Route path="students" element={<StudentsPage userRole={profile?.role} />} />
+          <Route path="students/:id" element={<StudentDetailPage userRole={profile?.role} />} />
           
-          {/* Fallback mock routes to avoid breaking links */}
-          <Route path="students" element={<div className="p-6"><h2 className="text-2xl font-bold">Élèves</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
           <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold">Bulletins & Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
           <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold">Finance & Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
           <Route path="settings" element={<div className="p-6"><h2 className="text-2xl font-bold">Paramètres</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
           
-          <Route path="*" element={<Navigate to="/classes" replace />} />
+          <Route path="*" element={<Navigate to="/students" replace />} />
         </Route>
       </Routes>
     </HashRouter>
