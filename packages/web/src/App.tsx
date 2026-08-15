@@ -6,6 +6,8 @@ import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
 import StudentsPage from "./pages/students/StudentsPage";
 import StudentDetailPage from "./pages/students/StudentDetailPage";
+import SubjectsPage from "./pages/subjects/SubjectsPage";
+import CoefficientsPage from "./pages/subjects/CoefficientsPage";
 
 type Profile = {
   id: string;
@@ -238,6 +240,16 @@ export default function App() {
           <Route
             path="students/:id"
             element={<StudentDetailPage userRole={profile?.role} />}
+          />
+
+          {/* Nouveau sous-lot D1 — Matières et Coefficients */}
+          <Route
+            path="subjects"
+            element={<SubjectsPage userRole={profile?.role} />}
+          />
+          <Route
+            path="subjects/coefficients"
+            element={<CoefficientsPage userRole={profile?.role} />}
           />
 
           {/* Placeholder routes for future modules */}

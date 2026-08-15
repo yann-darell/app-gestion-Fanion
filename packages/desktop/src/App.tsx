@@ -6,6 +6,8 @@ import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
 import StudentsPage from "./pages/students/StudentsPage";
 import StudentDetailPage from "./pages/students/StudentDetailPage";
+import SubjectsPage from "./pages/subjects/SubjectsPage";
+import CoefficientsPage from "./pages/subjects/CoefficientsPage";
 
 type Profile = {
   id: string;
@@ -213,6 +215,10 @@ export default function App() {
           <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
           <Route path="students" element={<StudentsPage userRole={profile?.role} />} />
           <Route path="students/:id" element={<StudentDetailPage userRole={profile?.role} />} />
+          
+          {/* Nouveau sous-lot D1 — Matières et Coefficients */}
+          <Route path="subjects" element={<SubjectsPage userRole={profile?.role} />} />
+          <Route path="subjects/coefficients" element={<CoefficientsPage userRole={profile?.role} />} />
           
           <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold">Bulletins & Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
           <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold">Finance & Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
