@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { HashRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { supabase } from "@fanion/shared";
+import { HashRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { supabase, isRouteAllowedForRole } from "@fanion/shared";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
@@ -8,12 +8,50 @@ import StudentsPage from "./pages/students/StudentsPage";
 import StudentDetailPage from "./pages/students/StudentDetailPage";
 import SubjectsPage from "./pages/subjects/SubjectsPage";
 import CoefficientsPage from "./pages/subjects/CoefficientsPage";
+import TeacherAssignmentsPage from "./pages/assignments/TeacherAssignmentsPage";
+import TeacherOverviewPage from "./pages/assignments/TeacherOverviewPage";
+import UserAccountsPage from "./pages/users/UserAccountsPage";
 
 type Profile = {
   id: string;
   full_name: string;
   role: string;
   division_scope?: string | null;
+};
+
+// Composant de garde de route (RBAC)
+const ProtectedRoute: React.FC<{ userRole?: string; children?: React.ReactNode }> = ({ userRole, children }) => {
+  const location = useLocation();
+
+  if (!userRole) return null;
+
+  const isAllowed = isRouteAllowedForRole(location.pathname, userRole);
+  if (!isAllowed) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children ? <>{children}</> : <Outlet />;
+};
+
+// Écran d'accueil neutre selon le rôle (Redirection pour direction, message d'attente pour enseignant)
+const HomePage: React.FC<{ userRole?: string }> = ({ userRole }) => {
+  if (userRole === "principal" || userRole === "directeur_etudes") {
+    return <Navigate to="/students" replace />;
+  }
+
+  return (
+    <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-16 h-16 rounded-full bg-slate/10 flex items-center justify-center mb-4 text-slate">
+        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+      </div>
+      <h2 className="text-xl font-display font-bold mb-2 text-ink">Espace Enseignant</h2>
+      <p className="text-sm text-slate max-w-md leading-relaxed">
+        Aucun module n'est disponible pour votre compte pour le moment. L'espace de saisie et suivi des notes sera activé très prochainement.
+      </p>
+    </div>
+  );
 };
 
 export default function App() {
@@ -107,16 +145,18 @@ export default function App() {
     return (
       <div className="min-h-screen bg-paper text-ink font-sans flex flex-col justify-between">
         {/* Header */}
-        <header className="border-b border-[#E4E0D6] bg-white py-4 px-6 shadow-sm flex-shrink-0">
+        <header className="border-b border-[#E4E0D6] bg-white py-3 px-6 shadow-sm flex-shrink-0">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-[#150A5E] flex items-center justify-center text-white font-display font-bold text-lg">
-                F
-              </div>
-              <h1 className="text-xl font-display font-bold tracking-tight">Le Fanion v2</h1>
+              <img
+                src="/logo_fanion.webp"
+                alt="Logo Le Fanion"
+                className="w-10 h-10 object-contain"
+              />
+              <h1 className="text-xl font-display font-bold tracking-tight">Le Fanion</h1>
             </div>
             <span className="text-xs px-2.5 py-1 rounded bg-[#150A5E] text-white font-semibold tracking-wider uppercase">
-              Desktop Portal
+              Portail Bureau
             </span>
           </div>
         </header>
@@ -124,7 +164,12 @@ export default function App() {
         {/* Main Content */}
         <main className="flex-grow flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white border border-[#E4E0D6] rounded p-8 shadow-sm">
-            <div className="text-center mb-6">
+            <div className="text-center mb-6 flex flex-col items-center">
+              <img
+                src="/logo_fanion.webp"
+                alt="Blason Collège Le Fanion"
+                className="w-20 h-20 object-contain mb-3 drop-shadow-sm"
+              />
               <h2 className="text-2xl font-display font-bold mb-1">Portail d'Accès Bureau</h2>
               <p className="text-sm text-slate">Connectez-vous pour accéder à l'application</p>
             </div>
@@ -186,7 +231,7 @@ export default function App() {
   // Layout wrapper component
   const MainLayout = () => (
     <div className="flex h-screen w-screen overflow-hidden bg-paper text-ink">
-      <Sidebar />
+      <Sidebar userRole={profile?.role} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header 
           userFullName={profile?.full_name} 
@@ -206,25 +251,32 @@ export default function App() {
     </div>
   );
 
-  /* Authenticated Router */
+  /* Authenticated Router avec protection RBAC */
   return (
     <HashRouter>
       <Routes>
         <Route path="/" element={<MainLayout />}>
-          <Route index element={<Navigate to="/students" replace />} />
-          <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
-          <Route path="students" element={<StudentsPage userRole={profile?.role} />} />
-          <Route path="students/:id" element={<StudentDetailPage userRole={profile?.role} />} />
+          <Route index element={<HomePage userRole={profile?.role} />} />
           
-          {/* Nouveau sous-lot D1 — Matières et Coefficients */}
-          <Route path="subjects" element={<SubjectsPage userRole={profile?.role} />} />
-          <Route path="subjects/coefficients" element={<CoefficientsPage userRole={profile?.role} />} />
-          
-          <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold">Bulletins & Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
-          <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold">Finance & Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
-          <Route path="settings" element={<div className="p-6"><h2 className="text-2xl font-bold">Paramètres</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
-          
-          <Route path="*" element={<Navigate to="/students" replace />} />
+          <Route element={<ProtectedRoute userRole={profile?.role} />}>
+            <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
+            <Route path="students" element={<StudentsPage userRole={profile?.role} />} />
+            <Route path="students/:id" element={<StudentDetailPage userRole={profile?.role} />} />
+            
+            <Route path="subjects" element={<SubjectsPage userRole={profile?.role} />} />
+            <Route path="subjects/coefficients" element={<CoefficientsPage userRole={profile?.role} />} />
+            
+            <Route path="assignments" element={<TeacherAssignmentsPage userRole={profile?.role} />} />
+            <Route path="assignments/overview" element={<TeacherOverviewPage userRole={profile?.role} />} />
+            
+            <Route path="users" element={<UserAccountsPage userRole={profile?.role} />} />
+
+            <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Bulletins & Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+            <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Finance & Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+            <Route path="settings" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Paramètres</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
     </HashRouter>

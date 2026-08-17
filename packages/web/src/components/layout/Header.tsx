@@ -26,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
+        <img src="/logo_fanion.webp" alt="Logo Le Fanion" className="w-7 h-7 object-contain" />
         <span className="font-sans text-sm font-semibold text-ink hidden sm:inline">
           Le Fanion — Portail Web de Gestion
         </span>

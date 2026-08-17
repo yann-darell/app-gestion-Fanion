@@ -17,6 +17,7 @@
     "build:web": "npm run build --workspace=@fanion/web"
   },
   "devDependencies": {
+    "supabase": "^2.114.0",
     "typescript": "^5.5.4"
   }
 }

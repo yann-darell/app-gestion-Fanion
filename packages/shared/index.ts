@@ -5,3 +5,5 @@ export * from "./api/students";
 export * from "./validation/students";
 export * from "./api/subjects";
 export * from "./api/teacherAssignments";
+export * from "./api/userManagement";
+export * from "./config/navigation";

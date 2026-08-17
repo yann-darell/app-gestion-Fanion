@@ -45,25 +45,76 @@
 
 ---
 
-## Lot D — Gestion des notes
+## Lot D — Gestion des notes (découpé en 4 sous-lots)
 
-- [ ] Migrations `subjects`, `subject_groups`, `class_subject_coefficients`, `terms`, `sequences`, `teacher_assignments`, `grades`
-- [ ] Policies RLS strictes sur `grades` (voir `SECURITE.md` §3.2) — **priorité absolue de ce lot**
-- [ ] Écran DE : gestion des matières par division
-- [ ] Écran DE : configuration des coefficients par classe
-- [ ] Écran DE : attribution enseignant → matière → classe
-- [ ] Écran enseignant (web, mobile-first) : saisie des notes de son périmètre uniquement
-- [ ] Fonction de calcul de moyenne de séquence (formule confirmée : `Σ(note×coef)/Σ(coef)`, voir `CONTEXTE_ANTIGRAVITY.md` §5)
-- [ ] Fonction de moyenne trimestrielle : **formule désormais confirmée** (voir `CONTEXTE_ANTIGRAVITY.md` §5) — implémentation définitive possible, plus de TODO
-- [ ] Fonction de calcul du code d'appréciation (CNA/CMA/CA/CBA/CTBA) à partir de la moyenne trimestrielle — formule confirmée
-- [ ] **Nouveau** : écran "Bordereau de classe" — tableau tous élèves × toutes matières pour une séquence/trimestre donné (voir `CONTEXTE_ANTIGRAVITY.md` §10)
-- [ ] **Nouveau** : classement de classe (liste triée par rang, élèves notés uniquement)
-- [ ] **Nouveau** : graphique de distribution des moyennes de la classe
+### D1 — Matières et coefficients
 
-**Vérification** : avec 2 comptes enseignants différents, chacun assigné à une matière/classe différente, confirmer qu'aucun des deux ne voit les notes de l'autre — test réel avec les 2 comptes, pas une supposition basée sur le code. Vérifier aussi que le calcul de moyenne trimestrielle reproduit exactement les valeurs des fichiers Excel réels fournis par le client (ex : ONANINA 6ème → 13,22).
+- [ ] Migrations `subjects`, `subject_groups`, `class_subject_coefficients`, `terms`, `sequences`
+- [ ] Policies RLS : lecture pour tout authentifié, écriture réservée `principal`/`directeur_etudes`
+- [ ] `packages/shared/api/subjects.ts` : CRUD matières, groupes, coefficients par classe
+- [ ] Écran DE/Principal : gestion des matières par division (créer/lister/modifier)
+- [ ] Écran DE/Principal : configuration des coefficients par classe (matière + groupe + coefficient)
+- [ ] Seed des `terms`/`sequences` pour l'année active (3 trimestres × 2 séquences chacun)
+
+**Vérification** : créer les matières et coefficients d'une classe réelle (ex : 6ème A), comparer avec la structure des fichiers Excel réels (groupes I à IV, mêmes coefficients que ONANINA/AYANGMA).
 
 ---
 
+### D2 — Attribution des enseignants
+
+- [ ] Migration `teacher_assignments` (enseignant → matière → classe)
+- [ ] Policies RLS : lecture/écriture réservée `principal`/`directeur_etudes`
+- [ ] `packages/shared/api/teacherAssignments.ts`
+- [ ] Écran DE/Principal : attribuer un enseignant à une ou plusieurs matières/classes
+- [ ] Écran DE/Principal : vue d'ensemble des attributions (qui enseigne quoi, où)
+
+**Vérification** : attribuer 2 enseignants différents (le compte de test existant + un nouveau à créer) sur 2 matières/classes différentes.
+
+---
+
+### D2bis — Gestion des comptes utilisateurs (invitation enseignant)
+
+> Ajout suite au cahier des charges v2 §4.5, identifié comme manquant après la construction de D2 : jusqu'ici, la création d'un compte enseignant nécessitait une manipulation manuelle du développeur dans le tableau de bord Supabase — la Principale/DE ne pouvait pas le faire elle-même. Ce sous-lot corrige ça.
+
+**Contrainte technique impérative** : la création de compte nécessite la clé `service_role`, qui ne doit **jamais** être exposée côté client (bureau/web). Solution obligatoire : une **Supabase Edge Function**, qui seule détient cette clé côté serveur.
+
+- [ ] Installer et configurer la CLI Supabase sur le poste de développement (nouvel outil, guidage pas à pas nécessaire)
+- [ ] Créer la Edge Function `invite-teacher` : vérifie que l'appelant est `principal`/`directeur_etudes`, crée le compte via `auth.admin.inviteUserByEmail()`, insère le profil (`role = 'enseignant'`)
+- [ ] Configurer le secret `SUPABASE_SERVICE_ROLE_KEY` côté Supabase (jamais dans le `.env` du projet client)
+- [ ] Déployer la fonction (`supabase functions deploy invite-teacher`)
+- [ ] `packages/shared/api/userManagement.ts` : `inviteTeacher(email, fullName)` appelant la Edge Function via `supabase.functions.invoke()`
+- [ ] Écran "Gestion des comptes" (bureau + web) : formulaire d'invitation, liste des enseignants existants, réservé à `principal`/`directeur_etudes`
+- [ ] **À ne pas oublier** : personnaliser l'écran affiché juste après le clic sur le lien d'invitation reçu par email (définition du mot de passe) — actuellement page générique par défaut de Supabase, à habiller avec le logo et la charte de l'école (`DESIGN_VISUEL.md`), pour une première impression cohérente
+
+**Vérification** : inviter un 2ème enseignant de test depuis l'interface (pas depuis le tableau de bord Supabase), confirmer qu'il reçoit l'email et peut définir son mot de passe sur un écran à la charte de l'école, puis se connecter avec ce nouveau compte.
+
+---
+
+### D3 — Saisie des notes (le point de sécurité le plus sensible du projet)
+
+- [ ] Migration `grades`
+- [ ] Policy RLS stricte sur `grades` (voir `SECURITE.md` §3.2) — **priorité absolue** : un enseignant ne peut lire/écrire que les notes des élèves de sa classe, pour sa matière assignée (jointure via `teacher_assignments`)
+- [ ] `packages/shared/api/grades.ts`
+- [ ] Script `verify_rls_grades.js` avec 2 comptes enseignants différents, testant qu'aucun ne voit les notes de l'autre
+- [ ] Écran enseignant (web, mobile-first en priorité) : saisie des notes de son périmètre uniquement, par séquence
+- [ ] Fonction de calcul de moyenne de séquence (`Σ(note×coef)/Σ(coef)`, formule confirmée)
+- [ ] Fonction de moyenne trimestrielle (formule confirmée, voir `CONTEXTE_ANTIGRAVITY.md` §5)
+- [ ] Fonction de code d'appréciation (CNA/CMA/CA/CBA/CTBA, formule confirmée)
+- [ ] **Nouveau** : écran enseignant "Évolution de mes élèves" — graphique de tendance des moyennes de sa matière/classe, trimestre par trimestre (visible uniquement pour son périmètre assigné, jamais les autres matières/classes)
+
+**Vérification** : avec 2 comptes enseignants réels, confirmer qu'aucun ne voit les notes de l'autre. Vérifier que la moyenne trimestrielle calculée reproduit exactement les valeurs des fichiers Excel réels (ex : ONANINA 6ème → 13,22). Vérifier que le graphique d'évolution d'un enseignant ne montre que sa propre matière.
+
+---
+
+### D4 — Bordereau, classement, graphique
+
+- [ ] Écran "Bordereau de classe" : tableau tous élèves × toutes matières pour une séquence/trimestre (voir `CONTEXTE_ANTIGRAVITY.md` §10)
+- [ ] Classement de classe (rang, élèves notés uniquement — règle confirmée)
+- [ ] Graphique de distribution des moyennes de la classe
+
+**Vérification** : le bordereau et le classement générés pour une classe réelle correspondent aux valeurs des fichiers Excel de référence.
+
+---
 ## Lot E — Bulletins
 
 - [x] ~~Décider de l'approche de génération~~ — **tranché** : les fichiers Word réels contiennent le tableau de notes comme image collée depuis Excel (pas de texte éditable), `docxtemplater` n'est donc pas viable pour cette partie. Génération directe en PDF (via `pdf-lib`), reproduisant la mise en page des bulletins PDF officiels déjà analysés. Voir `CONTEXTE_ANTIGRAVITY.md` §9 point 4.
