@@ -228,10 +228,27 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
           Chargement des matières et attributions...
         </div>
       ) : coefficients.length === 0 ? (
-        <div className="py-12 border border-line rounded bg-white text-center">
-          <p className="text-sm text-slate italic">
-            Aucune matière n'est configurée pour cette classe. Veuillez d'abord paramétrer les coefficients dans la section "Coefficients".
+        <div className="py-12 px-6 border border-line rounded bg-white text-center flex flex-col items-center">
+          <div className="w-12 h-12 rounded-full bg-fanion-gold/10 text-fanion-gold flex items-center justify-center mb-3">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-base font-semibold text-ink mb-1">
+            Aucune matière avec coefficient configuré pour cette classe
+          </h3>
+          <p className="text-xs text-slate max-w-md mb-4 leading-relaxed">
+            Pour pouvoir attribuer un enseignant à une matière, cette dernière doit d'abord posséder un coefficient configuré pour la classe.
           </p>
+          <a
+            href="#/subjects/coefficients"
+            className="px-4 py-2 bg-ink text-white text-xs font-semibold rounded hover:bg-opacity-90 transition inline-flex items-center gap-1.5"
+          >
+            Configurez d'abord les coefficients
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          </a>
         </div>
       ) : (
         <div className="border border-line rounded bg-white overflow-hidden shadow-sm">

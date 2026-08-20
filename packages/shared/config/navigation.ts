@@ -61,6 +61,18 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
+    id: "teacher-grades",
+    to: "/teacher/grades",
+    label: "Saisir mes notes",
+    allowedRoles: ["enseignant"],
+  },
+  {
+    id: "teacher-evolution",
+    to: "/teacher/evolution",
+    label: "Évolution élèves",
+    allowedRoles: ["enseignant"],
+  },
+  {
     id: "settings",
     to: "/settings",
     label: "Paramètres",

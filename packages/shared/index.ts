@@ -6,4 +6,6 @@ export * from "./validation/students";
 export * from "./api/subjects";
 export * from "./api/teacherAssignments";
 export * from "./api/userManagement";
+export * from "./api/gradeCalculations";
+export * from "./api/grades";
 export * from "./config/navigation";

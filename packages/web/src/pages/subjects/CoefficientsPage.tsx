@@ -14,6 +14,9 @@ import {
 interface SubjectRow {
   subject: SubjectRecord;
   coefficient: number;
+  // Valeur en base au dernier chargement/sauvegarde (null = jamais sauvegardée en base)
+  originalCoefficient: number | null;
+  originalGroupId: string | null;
   coefficientId: string | null;
   subjectGroupId: string;
   dirty: boolean;
@@ -113,6 +116,8 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
           const row: SubjectRow = {
             subject,
             coefficient: existing?.coefficient ?? 1,
+            originalCoefficient: existing?.coefficient ?? null,
+            originalGroupId: existing?.subject_group_id ?? null,
             coefficientId: existing?.id ?? null,
             subjectGroupId: existing?.subject_group_id ?? defaultGroupId,
             dirty: false,
@@ -145,13 +150,17 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
     value: string
   ) => {
     const num = parseInt(value, 10);
+    if (isNaN(num) || num < 1) return;
     setGroupedRows((prev) => {
       const updated = { ...prev };
-      updated[groupLabel] = updated[groupLabel].map((row) =>
-        row.subject.id === subjectId
-          ? { ...row, coefficient: isNaN(num) ? 1 : Math.max(1, num), dirty: true, error: null }
-          : row
-      );
+      updated[groupLabel] = updated[groupLabel].map((row) => {
+        if (row.subject.id !== subjectId) return row;
+        const newDirty =
+          row.originalCoefficient === null ||
+          num !== row.originalCoefficient ||
+          row.subjectGroupId !== row.originalGroupId;
+        return { ...row, coefficient: num, dirty: newDirty, error: null };
+      });
       recalcTotal(updated);
       return updated;
     });
@@ -175,10 +184,15 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
         (r) => r.subject.id !== subjectId
       );
 
+      const newDirty =
+        row.originalCoefficient === null ||
+        newGroupId !== row.originalGroupId ||
+        row.coefficient !== row.originalCoefficient;
+
       updated[newGroupLabel].push({
         ...row,
         subjectGroupId: newGroupId,
-        dirty: true,
+        dirty: newDirty,
         error: null,
       });
 
@@ -210,7 +224,14 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
         ...prev,
         [groupLabel]: prev[groupLabel].map((r) =>
           r.subject.id === subjectId
-            ? { ...r, saving: false, dirty: false, coefficientId: saved.id }
+            ? {
+                ...r,
+                saving: false,
+                dirty: false,
+                coefficientId: saved.id,
+                originalCoefficient: r.coefficient,
+                originalGroupId: r.subjectGroupId,
+              }
             : r
         ),
       }));
@@ -439,7 +460,7 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
                                     {isWriteAuthorized ? (
                                       <input
                                         type="number"
-                                        min={1}
+                                        max={10}
                                         value={row.coefficient}
                                         onChange={(e) => handleCoefficientChange(groupLabel, row.subject.id, e.target.value)}
                                         onBlur={() => row.dirty && handleSaveRow(groupLabel, row.subject.id)}
@@ -513,7 +534,7 @@ export const CoefficientsPage: React.FC<{ userRole?: string }> = ({ userRole }) 
                                     <span className="block text-[10px] text-slate uppercase font-semibold mb-0.5">Coef.</span>
                                     <input
                                       type="number"
-                                      min={1}
+                                      max={10}
                                       inputMode="decimal"
                                       value={row.coefficient}
                                       onChange={(e) => handleCoefficientChange(groupLabel, row.subject.id, e.target.value)}

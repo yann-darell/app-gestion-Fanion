@@ -92,15 +92,15 @@
 
 ### D3 — Saisie des notes (le point de sécurité le plus sensible du projet)
 
-- [ ] Migration `grades`
-- [ ] Policy RLS stricte sur `grades` (voir `SECURITE.md` §3.2) — **priorité absolue** : un enseignant ne peut lire/écrire que les notes des élèves de sa classe, pour sa matière assignée (jointure via `teacher_assignments`)
-- [ ] `packages/shared/api/grades.ts`
-- [ ] Script `verify_rls_grades.js` avec 2 comptes enseignants différents, testant qu'aucun ne voit les notes de l'autre
-- [ ] Écran enseignant (web, mobile-first en priorité) : saisie des notes de son périmètre uniquement, par séquence
-- [ ] Fonction de calcul de moyenne de séquence (`Σ(note×coef)/Σ(coef)`, formule confirmée)
-- [ ] Fonction de moyenne trimestrielle (formule confirmée, voir `CONTEXTE_ANTIGRAVITY.md` §5)
-- [ ] Fonction de code d'appréciation (CNA/CMA/CA/CBA/CTBA, formule confirmée)
-- [ ] **Nouveau** : écran enseignant "Évolution de mes élèves" — graphique de tendance des moyennes de sa matière/classe, trimestre par trimestre (visible uniquement pour son périmètre assigné, jamais les autres matières/classes)
+- [x] Migration `grades`
+- [x] Policy RLS stricte sur `grades` (voir `SECURITE.md` §3.2) — **priorité absolue** : un enseignant ne peut lire/écrire que les notes des élèves de sa classe, pour sa matière assignée (jointure via `teacher_assignments`)
+- [x] `packages/shared/api/grades.ts`
+- [x] Script `verify_rls_grades.js` avec 2 comptes enseignants différents, testant qu'aucun ne voit les notes de l'autre
+- [x] Écran enseignant (web, mobile-first en priorité) : saisie des notes de son périmètre uniquement, par séquence
+- [x] Fonction de calcul de moyenne de séquence (`Σ(note×coef)/Σ(coef)`, formule confirmée)
+- [x] Fonction de moyenne trimestrielle (formule confirmée, voir `CONTEXTE_ANTIGRAVITY.md` §5)
+- [x] Fonction de code d'appréciation (CNA/CMA/CA/CBA/CTBA, formule confirmée)
+- [x] **Nouveau** : écran enseignant "Évolution de mes élèves" — graphique de tendance des moyennes de sa matière/classe, trimestre par trimestre (visible uniquement pour son périmètre assigné, jamais les autres matières/classes)
 
 **Vérification** : avec 2 comptes enseignants réels, confirmer qu'aucun ne voit les notes de l'autre. Vérifier que la moyenne trimestrielle calculée reproduit exactement les valeurs des fichiers Excel réels (ex : ONANINA 6ème → 13,22). Vérifier que le graphique d'évolution d'un enseignant ne montre que sa propre matière.
 

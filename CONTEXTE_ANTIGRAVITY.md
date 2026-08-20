@@ -76,7 +76,9 @@ subject_groups (id, label)  -- I à IV
 class_subject_coefficients (id, class_id, subject_id, subject_group_id, coefficient)
 terms (id, school_year_id, label, order_index)  -- trimestres
 sequences (id, term_id, label, order_index)  -- 2 séquences par trimestre
-grades (id, student_id, subject_id, sequence_id, score, appreciation_code)
+grades (id, student_id, subject_id, sequence_id, score, created_at, updated_at)
+  -- appreciation_code et la lettre par matière ne sont JAMAIS stockés : calculés à la volée
+  -- (getSubjectLetterGrade par matière, getAppreciationCode sur la moyenne trimestrielle globale)
 competencies (id, subject_id, label)  -- niveaux APC
 competency_grades (id, student_id, competency_id, sequence_id, level_achieved)
 bulletin_generations (id, student_id, term_id, generated_at, docx_path, pdf_path)

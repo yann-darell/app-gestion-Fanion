@@ -195,13 +195,14 @@ export async function deleteCoefficient(id: string): Promise<void> {
 
 /**
  * Liste les trimestres d'une année scolaire, dans l'ordre.
+ * Si schoolYearId n'est pas fourni, cherche l'année active par défaut.
  */
-export async function listTerms(schoolYearId: string): Promise<TermRecord[]> {
-  const { data, error } = await supabase
-    .from("terms")
-    .select("*")
-    .eq("school_year_id", schoolYearId)
-    .order("order_index");
+export async function listTerms(schoolYearId?: string): Promise<TermRecord[]> {
+  let query = supabase.from("terms").select("*");
+  if (schoolYearId) {
+    query = query.eq("school_year_id", schoolYearId);
+  }
+  const { data, error } = await query.order("order_index");
   if (error) {
     console.error("Erreur listTerms:", error);
     throw error;
@@ -210,14 +211,14 @@ export async function listTerms(schoolYearId: string): Promise<TermRecord[]> {
 }
 
 /**
- * Liste les séquences d'un trimestre, dans l'ordre.
+ * Liste les séquences d'un trimestre ou toutes les séquences si aucun termId n'est fourni.
  */
-export async function listSequences(termId: string): Promise<SequenceRecord[]> {
-  const { data, error } = await supabase
-    .from("sequences")
-    .select("*")
-    .eq("term_id", termId)
-    .order("order_index");
+export async function listSequences(termId?: string): Promise<SequenceRecord[]> {
+  let query = supabase.from("sequences").select("*");
+  if (termId) {
+    query = query.eq("term_id", termId);
+  }
+  const { data, error } = await query.order("order_index");
   if (error) {
     console.error("Erreur listSequences:", error);
     throw error;
@@ -230,14 +231,20 @@ export async function listSequences(termId: string): Promise<SequenceRecord[]> {
  * Utile pour les sélecteurs de saisie de notes.
  */
 export async function listAllSequences(
-  schoolYearId: string
+  schoolYearId?: string
 ): Promise<(SequenceRecord & { term_label: string; term_order: number })[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("sequences")
-    .select("*, terms!inner(label, order_index, school_year_id)")
-    .eq("terms.school_year_id", schoolYearId)
+    .select("*, terms!inner(label, order_index, school_year_id)");
+
+  if (schoolYearId) {
+    query = query.eq("terms.school_year_id", schoolYearId);
+  }
+
+  const { data, error } = await query
     .order("terms(order_index)")
     .order("order_index");
+
   if (error) {
     console.error("Erreur listAllSequences:", error);
     throw error;
