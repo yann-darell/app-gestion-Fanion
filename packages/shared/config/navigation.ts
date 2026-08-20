@@ -2,80 +2,114 @@ export interface NavItemConfig {
   id: string;
   to: string;
   label: string;
+  category: string;
   allowedRoles: string[];
 }
 
+export interface NavGroup {
+  category: string;
+  items: NavItemConfig[];
+}
+
 export const NAVIGATION_ITEMS: NavItemConfig[] = [
+  // --- Structure & Pédagogie ---
   {
     id: "students",
     to: "/students",
     label: "Élèves",
+    category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "classes",
     to: "/classes",
     label: "Classes",
+    category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "subjects",
     to: "/subjects",
     label: "Matières",
+    category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "coefficients",
     to: "/subjects/coefficients",
     label: "Coefficients",
+    category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "assignments",
     to: "/assignments",
     label: "Attributions",
+    category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "assignments-overview",
     to: "/assignments/overview",
     label: "Vue d'ensemble",
+    category: "Structure & Pédagogie",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+
+  // --- Évaluations & Examens ---
+  {
+    id: "grades",
+    to: "/grades",
+    label: "Bulletins & Notes",
+    category: "Évaluations & Examens",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+  {
+    id: "reports-class",
+    to: "/reports/class",
+    label: "Bordereau de classe",
+    category: "Évaluations & Examens",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+
+  // --- Finance & Administration ---
+  {
+    id: "finance",
+    to: "/finance",
+    label: "Finance & Scolarité",
+    category: "Finance & Administration",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "users",
     to: "/users",
     label: "Gestion Comptes",
+    category: "Finance & Administration",
     allowedRoles: ["principal", "directeur_etudes"],
   },
-  {
-    id: "grades",
-    to: "/grades",
-    label: "Bulletins & Notes",
-    allowedRoles: ["principal", "directeur_etudes"],
-  },
-  {
-    id: "finance",
-    to: "/finance",
-    label: "Finance & Scolarité",
-    allowedRoles: ["principal", "directeur_etudes"],
-  },
+
+  // --- Espace Enseignant ---
   {
     id: "teacher-grades",
     to: "/teacher/grades",
     label: "Saisir mes notes",
+    category: "Espace Enseignant",
     allowedRoles: ["enseignant"],
   },
   {
     id: "teacher-evolution",
     to: "/teacher/evolution",
     label: "Évolution élèves",
+    category: "Espace Enseignant",
     allowedRoles: ["enseignant"],
   },
+
+  // --- Paramètres ---
   {
     id: "settings",
     to: "/settings",
     label: "Paramètres",
+    category: "Finance & Administration",
     allowedRoles: ["principal", "directeur_etudes"],
   },
 ];
@@ -86,6 +120,27 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
 export function getNavItemsForRole(role?: string | null): NavItemConfig[] {
   if (!role) return [];
   return NAVIGATION_ITEMS.filter((item) => item.allowedRoles.includes(role));
+}
+
+/**
+ * Retourne les éléments de navigation autorisés et groupés par catégorie pour un rôle donné.
+ */
+export function getGroupedNavItemsForRole(role?: string | null): NavGroup[] {
+  const allowed = getNavItemsForRole(role);
+  const groupsMap = new Map<string, NavItemConfig[]>();
+
+  for (const item of allowed) {
+    const cat = item.category;
+    if (!groupsMap.has(cat)) {
+      groupsMap.set(cat, []);
+    }
+    groupsMap.get(cat)!.push(item);
+  }
+
+  return Array.from(groupsMap.entries()).map(([category, items]) => ({
+    category,
+    items,
+  }));
 }
 
 /**

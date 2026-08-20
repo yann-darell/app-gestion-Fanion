@@ -111,7 +111,12 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       setStudents(studentsData);
 
       // Charger les notes déjà saisies
-      const gradesData = await listGrades({ class_id: classId, subject_id: subjectId, sequence_id: sequenceId });
+      let gradesData: GradeRecord[] = [];
+      if (studentsData.length > 0) {
+        const studentIds = studentsData.map(s => s.id);
+        const allGrades = await listGrades({ subject_id: subjectId, sequence_id: sequenceId });
+        gradesData = allGrades.filter(g => studentIds.includes(g.student_id));
+      }
 
       const gMap: Record<string, number> = {};
       gradesData.forEach((g: GradeRecord) => {

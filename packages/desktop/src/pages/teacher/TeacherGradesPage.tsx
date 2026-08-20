@@ -87,19 +87,23 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       setLoadingGrades(true);
       setError(null);
 
-      const [studentsResult, gradesData] = await Promise.all([
-        userRole === "enseignant"
-          ? listMyAssignedStudents(classId, subjectId)
-          : listStudents({ classId, status: "active" }).then(full =>
-              full.map(s => ({
-                id: s.id, matricule: s.matricule || "", first_name: s.first_name,
-                last_name: s.last_name, status: s.status || "active",
-              }))
-            ),
-        listGrades({ class_id: classId, subject_id: subjectId, sequence_id: sequenceId }),
-      ]);
+      const studentsResult = userRole === "enseignant"
+        ? await listMyAssignedStudents(classId, subjectId)
+        : await listStudents({ classId, status: "active" }).then(full =>
+            full.map(s => ({
+              id: s.id, matricule: s.matricule || "", first_name: s.first_name,
+              last_name: s.last_name, status: s.status || "active",
+            }))
+          );
 
       setStudents(studentsResult);
+
+      let gradesData: GradeRecord[] = [];
+      if (studentsResult.length > 0) {
+        const studentIds = studentsResult.map(s => s.id);
+        const allGrades = await listGrades({ subject_id: subjectId, sequence_id: sequenceId });
+        gradesData = allGrades.filter(g => studentIds.includes(g.student_id));
+      }
 
       const gMap: Record<string, number> = {};
       gradesData.forEach((g: GradeRecord) => { gMap[g.student_id] = g.score; });

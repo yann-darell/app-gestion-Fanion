@@ -13,11 +13,10 @@ import {
   supabase,
   listTeacherAssignments,
   listSequences,
-  listGrades,
   TeacherAssignmentRecord,
   SequenceRecord,
-  GradeRecord,
 } from "@fanion/shared";
+import { generateClassReport } from "@fanion/shared/services/classReportService";
 import PageContainer from "../../components/ui/PageContainer";
 import PageHeader from "../../components/ui/PageHeader";
 
@@ -80,23 +79,37 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       setLoadingChart(true);
       setError(null);
 
-      const [sequencesData, gradesData] = await Promise.all([
-        listSequences(),
-        listGrades({ class_id: classId, subject_id: subjectId }),
-      ]);
+      const sequencesData = await listSequences();
 
-      const chartPoints: EvolutionDataPoint[] = sequencesData.map((seq: SequenceRecord) => {
-        const seqGrades = gradesData.filter((g: GradeRecord) => g.sequence_id === seq.id);
-        if (seqGrades.length === 0) return { sequenceLabel: seq.label, averageScore: 0 };
-        const sum = seqGrades.reduce((acc, curr) => acc + curr.score, 0);
-        return {
-          sequenceLabel: seq.label,
-          averageScore: Math.round((sum / seqGrades.length) * 100) / 100,
-        };
-      });
+      // Pour chaque séquence, générer le rapport de classe et extraire la moyenne
+      const chartPoints: EvolutionDataPoint[] = await Promise.all(
+        sequencesData.map(async (seq: SequenceRecord) => {
+          const report = await generateClassReport(classId, "sequence", seq.id);
+          
+          // Chercher la moyenne spécifique de cette matière ou la moyenne générale de la classe
+          // Si le graphique s'intéresse à la matière spécifique enseignée :
+          const subReport = report.subjects.find((s) => s.id === subjectId);
+          let avgScore = 0;
+          if (subReport) {
+            const validGrades = report.rows
+              .map((r) => r.gradesBySubject[subjectId]?.score)
+              .filter((score): score is number => score !== null);
+            if (validGrades.length > 0) {
+              const sum = validGrades.reduce((acc, curr) => acc + curr, 0);
+              avgScore = Math.round((sum / validGrades.length) * 100) / 100;
+            }
+          }
+
+          return {
+            sequenceLabel: seq.label,
+            averageScore: avgScore,
+          };
+        })
+      );
 
       setEvolutionData(chartPoints);
     } catch (err: any) {
+      console.error("Erreur calcul évolution:", err);
       setError("Erreur lors du calcul des moyennes.");
     } finally {
       setLoadingChart(false);

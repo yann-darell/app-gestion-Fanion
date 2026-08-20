@@ -13,11 +13,10 @@ import {
   supabase,
   listTeacherAssignments,
   listSequences,
-  listGrades,
   TeacherAssignmentRecord,
   SequenceRecord,
-  GradeRecord,
 } from "@fanion/shared";
+import { generateClassReport } from "@fanion/shared/services/classReportService";
 
 interface TeacherEvolutionPageProps {
   userRole?: string;
@@ -86,29 +85,30 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       setLoadingChart(true);
       setError(null);
 
-      const [sequencesData, gradesData] = await Promise.all([
-        listSequences(),
-        listGrades({ class_id: classId, subject_id: subjectId }),
-      ]);
+      const sequencesData = await listSequences();
 
-      const chartPoints: EvolutionDataPoint[] = [];
+      const chartPoints: EvolutionDataPoint[] = await Promise.all(
+        sequencesData.map(async (seq: SequenceRecord) => {
+          const report = await generateClassReport(classId, "sequence", seq.id);
+          
+          const subReport = report.subjects.find((s) => s.id === subjectId);
+          let avgScore = 0;
+          if (subReport) {
+            const validGrades = report.rows
+              .map((r) => r.gradesBySubject[subjectId]?.score)
+              .filter((score): score is number => score !== null);
+            if (validGrades.length > 0) {
+              const sum = validGrades.reduce((acc, curr) => acc + curr, 0);
+              avgScore = Math.round((sum / validGrades.length) * 100) / 100;
+            }
+          }
 
-      sequencesData.forEach((seq: SequenceRecord) => {
-        const seqGrades = gradesData.filter((g: GradeRecord) => g.sequence_id === seq.id);
-        if (seqGrades.length > 0) {
-          const sum = seqGrades.reduce((acc, curr) => acc + curr.score, 0);
-          const avg = Math.round((sum / seqGrades.length) * 100) / 100;
-          chartPoints.push({
+          return {
             sequenceLabel: seq.label,
-            averageScore: avg,
-          });
-        } else {
-          chartPoints.push({
-            sequenceLabel: seq.label,
-            averageScore: 0,
-          });
-        }
-      });
+            averageScore: avgScore,
+          };
+        })
+      );
 
       setEvolutionData(chartPoints);
     } catch (err: any) {

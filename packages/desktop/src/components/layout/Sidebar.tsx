@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { getNavItemsForRole } from "@fanion/shared";
+import { getGroupedNavItemsForRole } from "@fanion/shared";
 
 interface SidebarProps {
   userRole?: string;
@@ -48,9 +48,24 @@ const ICON_MAP: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
     </svg>
   ),
+  "reports-class": (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
   finance: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  "teacher-grades": (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+    </svg>
+  ),
+  "teacher-evolution": (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
     </svg>
   ),
   settings: (
@@ -62,7 +77,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
-  const allowedNavItems = getNavItemsForRole(userRole);
+  const groupedNavItems = getGroupedNavItemsForRole(userRole);
 
   return (
     <aside className="w-64 bg-ink text-paper h-screen flex flex-col flex-shrink-0 border-r border-line/10">
@@ -82,8 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
       </div>
 
       {/* Navigation links */}
-      <nav className="flex-1 px-4 py-6 flex flex-col gap-1 overflow-y-auto">
-        {allowedNavItems.length === 0 ? (
+      <nav className="flex-1 px-3 py-4 flex flex-col gap-5 overflow-y-auto">
+        {groupedNavItems.length === 0 ? (
           <div className="p-4 rounded bg-white/5 border border-white/10 text-center my-auto">
             <svg className="w-8 h-8 mx-auto text-slate/60 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -93,32 +108,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
             </p>
           </div>
         ) : (
-          allowedNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded text-sm font-medium transition-all duration-150 relative ${
-                  isActive
-                    ? "bg-white/5 text-paper font-semibold animate-fade-in"
-                    : "text-slate hover:text-paper hover:bg-white/5"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center pl-1 text-fanion-gold">
-                      <svg width="6" height="8" viewBox="0 0 6 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M0,0.5 L6,4 L0,7.5 Z" fill="currentColor" />
-                      </svg>
-                    </span>
+          groupedNavItems.map((group) => (
+            <div key={group.category} className="flex flex-col gap-1">
+              <div className="px-3 pb-1 text-[10px] font-semibold text-slate/60 uppercase tracking-widest">
+                {group.category}
+              </div>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded text-sm font-medium transition-all duration-150 relative ${
+                      isActive
+                        ? "bg-white/5 text-paper font-semibold"
+                        : "text-slate hover:text-paper hover:bg-white/5"
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center text-fanion-gold">
+                          <svg width="4" height="14" viewBox="0 0 4 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="4" height="14" rx="2" fill="currentColor" />
+                          </svg>
+                        </span>
+                      )}
+                      <span className={isActive ? "text-fanion-gold pl-1" : "pl-1"}>{ICON_MAP[item.id]}</span>
+                      <span className="truncate">{item.label}</span>
+                    </>
                   )}
-                  <span className={isActive ? "text-fanion-gold pl-1.5" : "pl-1.5"}>{ICON_MAP[item.id]}</span>
-                  <span className="pl-0.5">{item.label}</span>
-                </>
-              )}
-            </NavLink>
+                </NavLink>
+              ))}
+            </div>
           ))
         )}
       </nav>

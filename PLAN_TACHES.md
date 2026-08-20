@@ -108,9 +108,9 @@
 
 ### D4 — Bordereau, classement, graphique
 
-- [ ] Écran "Bordereau de classe" : tableau tous élèves × toutes matières pour une séquence/trimestre (voir `CONTEXTE_ANTIGRAVITY.md` §10)
-- [ ] Classement de classe (rang, élèves notés uniquement — règle confirmée)
-- [ ] Graphique de distribution des moyennes de la classe
+- [x] Écran "Bordereau de classe" : tableau tous élèves × toutes matières pour une séquence/trimestre (voir `CONTEXTE_ANTIGRAVITY.md` §10)
+- [x] Classement de classe (rang, élèves notés uniquement — règle confirmée)
+- [x] Graphique de distribution des moyennes de la classe
 
 **Vérification** : le bordereau et le classement générés pour une classe réelle correspondent aux valeurs des fichiers Excel de référence.
 
