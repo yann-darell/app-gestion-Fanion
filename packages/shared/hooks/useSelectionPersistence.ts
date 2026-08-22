@@ -13,7 +13,7 @@ export function useSelectionPersistence<T extends string = string>(
   storageKey: string,
   defaultValue: T = "" as T,
   paramName: string = storageKey
-): [T, (newValue: T | ((prev: T) => T)) => void] {
+): [T, (newValue: T | string | ((prev: T) => T | string)) => void] {
   const fullStorageKey = `fanion_sel_${storageKey}`;
 
   // Read initial value from URL or localStorage or defaultValue
@@ -41,9 +41,9 @@ export function useSelectionPersistence<T extends string = string>(
 
   // Sync state changes to localStorage and URL search params
   const setValue = useCallback(
-    (newValue: T | ((prev: T) => T)) => {
+    (newValue: any) => {
       setState((prev) => {
-        const resolvedValue = typeof newValue === "function" ? (newValue as Function)(prev) : newValue;
+        const resolvedValue = typeof newValue === "function" ? newValue(prev) : newValue;
         const stringValue = String(resolvedValue ?? "");
 
         if (typeof window !== "undefined") {

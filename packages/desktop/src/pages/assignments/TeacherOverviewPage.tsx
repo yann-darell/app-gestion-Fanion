@@ -91,10 +91,7 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Vue d'ensemble des Enseignants"
-        description="Supervision globale des attributions de cours par enseignant."
-      />
+      <PageHeader title="Vue d'Ensemble des Enseignants" />
 
       {error && (
         <div className="mb-4 p-4 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
@@ -143,7 +140,7 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <Badge variant={count > 0 ? "success" : "secondary"}>
+                    <Badge variant={count > 0 ? "green" : "gray"}>
                       {count} attribution{count > 1 ? "s" : ""}
                     </Badge>
                     <button

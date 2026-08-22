@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
   listSubjects,
-  createSubject,
-  updateSubject,
   SubjectRecord,
 } from "@fanion/shared";
 import PageContainer from "../../components/ui/PageContainer";
@@ -146,7 +144,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ userRole }) => {
                 </TableCell>
                 <TableCell>
                   <Badge
-                    variant={subject.division_id === "college" ? "default" : "secondary"}
+                    variant={subject.division_id === "college" ? "green" : "gray"}
                   >
                     {DIVISION_LABELS[subject.division_id] || subject.division_id}
                   </Badge>

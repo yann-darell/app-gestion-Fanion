@@ -155,10 +155,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
 
   return (
     <PageContainer>
-      <PageHeader
-        title="Attribution des Enseignants par Classe"
-        description="Assignez les enseignants aux matières configurées pour chaque classe."
-      />
+      <PageHeader title="Affectations des Enseignants" />
 
       {/* Barre de filtre Division + Classe */}
       <div className="flex flex-wrap items-end gap-4 mb-6">
@@ -313,9 +310,9 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
                     </td>
                     <td className="px-4 py-3 text-center">
                       {currentTeacherId ? (
-                        <Badge variant="success">Assigné</Badge>
+                        <Badge variant="green">Assigné</Badge>
                       ) : (
-                        <Badge variant="secondary">Non assigné</Badge>
+                        <Badge variant="gray">Non assigné</Badge>
                       )}
                     </td>
                   </tr>

@@ -16,6 +16,8 @@ import {
   BulletinCompletenessDiagnostic,
   useSelectionPersistence,
 } from "@fanion/shared";
+import PageContainer from "../../components/ui/PageContainer";
+import PageHeader from "../../components/ui/PageHeader";
 
 interface BulletinsPdfPageProps {
   userRole?: string;
@@ -70,7 +72,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
           setSelectedClassId((prev) => (prev && clsData.some((c) => c.id === prev) ? prev : clsData[0].id));
         }
       } catch (err: any) {
-        console.error("Erreur d'initialisation des bulletins:", err);
+        console.error("Erreur d'initialisation des bulletins (desktop):", err);
         setError("Impossible de charger la liste des classes ou des périodes.");
       } finally {
         setLoadingInit(false);
@@ -105,7 +107,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
       const stData = await listStudents({ classId: selectedClassId, status: "active" });
       setStudents(stData);
     } catch (err: any) {
-      console.error("Erreur chargement élèves:", err);
+      console.error("Erreur chargement élèves (desktop):", err);
       setError("Impossible de charger les élèves de la classe.");
     } finally {
       setLoadingStudents(false);
@@ -116,7 +118,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     loadStudents();
   }, [loadStudents]);
 
-  // 4. Chargement déterministe des statuts des bulletins (Généré/Non généré) dès que Classe, Période ou Élèves changent
+  // 4. Chargement déterministe des statuts des bulletins (Généré/Non généré)
   const loadStatuses = useCallback(async () => {
     if (!selectedClassId || !selectedPeriodId || students.length === 0) {
       setBulletinStatuses({});
@@ -127,7 +129,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
       const statuses = await fetchClassBulletinsStatus(selectedClassId, periodType, selectedPeriodId);
       setBulletinStatuses(statuses);
     } catch (err: any) {
-      console.error("Erreur chargement statuts bulletins:", err);
+      console.error("Erreur chargement statuts bulletins (desktop):", err);
     } finally {
       setLoadingStatuses(false);
     }
@@ -137,7 +139,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     loadStatuses();
   }, [loadStatuses]);
 
-  // Handler 1 : Demande de Génération Individuelle (avec pré-vérification de complétude)
+  // Demande de Génération Individuelle (avec pré-vérification)
   const handleRequestGeneration = async (student: StudentRecord) => {
     if (!selectedPeriodId) return;
     setError(null);
@@ -161,7 +163,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
   };
 
-  // Handler 2 : Exécution effective de la génération
+  // Exécution effective de la génération
   const executeGeneration = async (studentId: string) => {
     try {
       setGeneratingStudentId(studentId);
@@ -174,7 +176,6 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         periodType,
       });
 
-      // Rafraîchir les statuts
       await loadStatuses();
     } catch (err: any) {
       console.error("Erreur génération bulletin PDF:", err);
@@ -231,32 +232,27 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
 
   if (!isAuthorized) {
     return (
-      <div className="p-6">
-        <h1 className="font-display text-2xl font-bold text-ink mb-4">Bulletins de classe</h1>
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded text-rose-700 font-medium text-sm">
-          Accès restreint. Seuls le Principal et le Directeur des Études peuvent gérer les bulletins de classe.
+      <PageContainer>
+        <PageHeader title="Bulletins de Classe" />
+        <div className="p-6 bg-rose-50 border border-rose-200 rounded text-rose-700 font-medium text-sm">
+          Accès restreint. Seuls le Principal et le Directeur des Études peuvent consulter et gérer les bulletins de classe.
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink">Bulletins de classe</h1>
-        <p className="text-xs text-slate mt-1">
-          Gestion et suivi individuel de la génération des bulletins officiels par classe et période.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Bulletins de Classe" />
 
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded text-sm text-rose-700 font-medium">
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded text-sm text-rose-700 font-medium">
           {error}
         </div>
       )}
 
-      {/* Barre de Filtres Globaux */}
-      <div className="bg-white p-4 border border-line rounded shadow-sm flex flex-col md:flex-row md:items-end gap-4">
+      {/* Barre de Filtres */}
+      <div className="bg-white p-4 border border-line rounded mb-6 shadow-sm flex flex-wrap items-end gap-4">
         {/* Division */}
         <div>
           <label className="block text-xs font-semibold text-slate uppercase mb-1">Division</label>
@@ -276,7 +272,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         </div>
 
         {/* Classe */}
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-[200px]">
           <label className="block text-xs font-semibold text-slate uppercase mb-1">Classe</label>
           <select
             value={selectedClassId}
@@ -343,7 +339,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         </div>
       </div>
 
-      {/* Tableau des Élèves de la Classe */}
+      {/* Tableau des Élèves */}
       <div className="bg-white border border-line rounded shadow-sm overflow-hidden">
         {loadingStudents || loadingStatuses ? (
           <div className="py-16 text-center text-sm text-slate font-medium">Chargement de la liste et des statuts…</div>
@@ -374,7 +370,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate">{st.matricule}</td>
 
-                      {/* Statut Généré / Pas Généré */}
+                      {/* Statut */}
                       <td className="px-4 py-3 text-center">
                         {status.isGenerated ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
@@ -388,10 +384,9 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                         )}
                       </td>
 
-                      {/* Actions par élève */}
+                      {/* Actions */}
                       <td className="px-4 py-3 text-right pr-4">
                         <div className="inline-flex flex-wrap justify-end gap-1.5">
-                          {/* Action 1: Générer / Régénérer */}
                           <button
                             type="button"
                             onClick={() => handleRequestGeneration(st)}
@@ -405,7 +400,6 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                             {isBusy ? "Génération…" : status.isGenerated ? "Régénérer" : "Générer"}
                           </button>
 
-                          {/* Action 2: Voir (PDF) */}
                           <button
                             type="button"
                             onClick={() => handleViewPdf(st.id, status.pdfPath)}
@@ -415,7 +409,6 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                             {actionLoading === `view_${st.id}` ? "…" : "Voir"}
                           </button>
 
-                          {/* Action 3: Télécharger */}
                           <button
                             type="button"
                             onClick={() => handleDownloadPdf(st.id, status.pdfPath, `${st.last_name}_${st.first_name}`)}
@@ -511,7 +504,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 };
 

@@ -25,7 +25,7 @@ export const StudentRow: React.FC<StudentRowProps> = ({
   useEffect(() => {
     let mounted = true;
     if (student.photo_path) {
-      getStudentPhotoUrl(student.photo_path).then((url) => {
+      getStudentPhotoUrl(student.photo_path as string).then((url) => {
         if (mounted) setPhotoUrl(url);
       });
     } else {
@@ -39,7 +39,7 @@ export const StudentRow: React.FC<StudentRowProps> = ({
   const initials =
     `${student.first_name.charAt(0)}${student.last_name.charAt(0)}`.toUpperCase();
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
       case "active":
         return <Badge variant="green">Inscrit</Badge>;

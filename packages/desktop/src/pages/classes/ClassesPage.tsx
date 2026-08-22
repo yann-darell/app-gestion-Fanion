@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { 
   listClasses, 
   ClassRecord, 
-  SchoolYearRecord,
   supabase
 } from "@fanion/shared";
 import PageContainer from "../../components/ui/PageContainer";
@@ -162,7 +161,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
                 <TableCell className="font-semibold text-ink">{cls.name}</TableCell>
                 <TableCell>{cls.level}</TableCell>
                 <TableCell>
-                  <Badge variant={cls.division_id === "college" ? "default" : "secondary"}>
+                  <Badge variant={cls.division_id === "college" ? "green" : "gray"}>
                     {cls.division_id === "college" ? "Collège" : "Primaire"}
                   </Badge>
                 </TableCell>

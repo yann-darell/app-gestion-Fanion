@@ -1,7 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { supabase } from "./supabaseClient";
 import { generateClassReport } from "../services/classReportService";
-import { getSubjectLetterGrade, getAppreciationCode } from "./gradeCalculations";
+import { getAppreciationCode } from "./gradeCalculations";
 import { listCoefficients, listSubjectGroups } from "./subjects";
 import { listAssignments } from "./teacherAssignments";
 
@@ -129,24 +129,55 @@ export async function createStudentBulletinPdfBuffer(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.TimesRoman);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-  // Charger le logo officiel PNG (logo_fanion.png)
+  // 3. Charger le logo officiel PNG (logo_fanion.png) de manière universelle (Web et Node)
   let logoImage: any = null;
   try {
-    const fs = require("fs");
-    const path = require("path");
-    const logoPath = path.resolve(process.cwd(), "logo_fanion.png");
-    if (fs.existsSync(logoPath)) {
-      const logoBuffer = fs.readFileSync(logoPath);
-      logoImage = await pdfDoc.embedPng(logoBuffer);
+    if (typeof window !== "undefined" && typeof window.fetch === "function") {
+      // Environnement Navigateur / Web / Electron renderer
+      const res = await fetch("/logo_fanion.png");
+      if (res.ok) {
+        const logoArrayBuffer = await res.arrayBuffer();
+        logoImage = await pdfDoc.embedPng(logoArrayBuffer);
+      }
+    } else {
+      // Environnement Node.js (scripts de test)
+      const fs = require("fs");
+      const path = require("path");
+      const logoPath = path.resolve(process.cwd(), "logo_fanion.png");
+      if (fs.existsSync(logoPath)) {
+        const logoBuffer = fs.readFileSync(logoPath);
+        logoImage = await pdfDoc.embedPng(logoBuffer);
+      }
     }
   } catch (e) {
-    console.warn("Logo PNG introuvable ou erreur d'embédage:", e);
+    console.warn("Avertissement: Logo PNG non chargé:", e);
+  }
+
+  // Charger la photo réelle de l'élève depuis Supabase Storage si elle existe
+  let studentPhotoImg: any = null;
+  if (student.photo_path) {
+    try {
+      const { data: photoBlob, error: photoErr } = await supabase.storage
+        .from("student-photos")
+        .download(student.photo_path);
+
+      if (!photoErr && photoBlob) {
+        const photoArrayBuffer = await photoBlob.arrayBuffer();
+        const photoPathLower = student.photo_path.toLowerCase();
+        if (photoPathLower.endsWith(".png")) {
+          studentPhotoImg = await pdfDoc.embedPng(photoArrayBuffer);
+        } else {
+          studentPhotoImg = await pdfDoc.embedJpg(photoArrayBuffer);
+        }
+      }
+    } catch (pErr) {
+      console.warn("Avertissement: Photo élève non téléchargée:", pErr);
+    }
   }
 
   // Détection du premier cycle (6ème et 5ème) pour la variante 9 colonnes (avec compétences)
   const className = (student.classes?.name || "").toUpperCase();
   const isFirstCycleCompetence = className.includes("6") || className.includes("5") || className.includes("SIXIEME") || className.includes("CINQUIEME");
-  const columnCount = isFirstCycleCompetence ? 9 : 8;
 
   // Filigrane Sécurisé (Zone restreinte : de la 4ème ligne du Groupe I au bas du bloc Saumon)
   // Sera dessiné dynamiquement pendant le tracé du tableau
@@ -208,13 +239,24 @@ export async function createStudentBulletinPdfBuffer(
     borderWidth: 0.8,
     color: rgb(1, 1, 1),
   });
-  page.drawText("PHOTO", {
-    x: photoX + 16,
-    y: photoY + 32,
-    size: 8,
-    font: fontBold,
-    color: rgb(0.4, 0.4, 0.4),
-  });
+
+  if (studentPhotoImg) {
+    // Si l'élève possède une photo, la dessiner dans le cadre
+    page.drawImage(studentPhotoImg, {
+      x: photoX + 1,
+      y: photoY + 1,
+      width: 58,
+      height: 70,
+    });
+  } else {
+    page.drawText("PHOTO", {
+      x: photoX + 16,
+      y: photoY + 32,
+      size: 8,
+      font: fontBold,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+  }
 
   // ==========================================
   // 2. CADRE TITRE RECTANGULAIRE 3D & ANNÉE
@@ -376,7 +418,7 @@ export async function createStudentBulletinPdfBuffer(
       borderWidth: 0.8,
       color: rgb(1, 1, 1),
     });
-    page.drawText(`GROUPE ${grp.label} : MATIÈRES ${grp.name?.toUpperCase() || ""}`, {
+    page.drawText(`GROUPE ${grp.label} : MATIÈRES ${(grp as any).name?.toUpperCase() || ""}`, {
       x: marginX + 5,
       y: tableY - 9,
       size: 6.5,
@@ -508,8 +550,7 @@ export async function createStudentBulletinPdfBuffer(
   // 5. TOTAL GÉNÉRAL (2 COLONNES SANS TEINTE)
   // ==========================================
   tableY -= 4;
-  const col1GenWidth = isFirstCycleCompetence ? colWidths[0] + colWidths[1] : colWidths[0];
-  const col2GenWidth = contentWidth - col1GenWidth;
+  const col1GenWidth = 240;
 
   page.drawRectangle({
     x: marginX,
@@ -522,7 +563,14 @@ export async function createStudentBulletinPdfBuffer(
   });
   page.drawLine({ start: { x: marginX + col1GenWidth, y: tableY }, end: { x: marginX + col1GenWidth, y: tableY - 14 }, color: rgb(0, 0, 0), thickness: 1 });
 
-  page.drawText(`Total Général (GI + GII + GIII + GIV) = ${formatFr(studentRow.totalPoints)}`, {
+  // Calcul du total des points général de l'élève (somme des notes * coefficients des matières valides)
+  const totalStudentPoints = Object.values(studentRow.gradesBySubject).reduce((acc, g) => {
+    if (g.score === null) return acc;
+    const coeff = report.subjects.find((s) => s.id === g.subject_id)?.coefficient || 1;
+    return acc + g.score * coeff;
+  }, 0);
+
+  page.drawText(`Total Général (GI + GII + GIII + GIV) = ${formatFr(totalStudentPoints)}`, {
     x: marginX + 5,
     y: tableY - 10,
     size: 7,
@@ -610,7 +658,6 @@ export async function createStudentBulletinPdfBuffer(
   tableY -= 12;
   const discHeight = 78;
   const headerBarHeight = 12;
-  const totalDiscHeight = discHeight + headerBarHeight;
 
   // 1. Bandeau supérieur "DECISIONS ET OBSERVATIONS / Décisions And Observations"
   page.drawRectangle({
@@ -728,7 +775,6 @@ export async function createStudentBulletinPdfBuffer(
 
   // Division verticale exacte sous l'entête TRAVAIL (Sous-colonne A et Sous-colonne B)
   const subWidthA = cWidth * 0.58;
-  const subWidthB = cWidth * 0.42;
   const splitX = col4X + subWidthA;
 
   page.drawLine({ start: { x: splitX, y: mainBoxY - 12 }, end: { x: splitX, y: mainBoxY - discHeight }, color: rgb(0, 0, 0), thickness: 0.5 });
@@ -843,10 +889,12 @@ export async function generateAndSaveStudentBulletin(
       {
         student_id: studentId,
         term_id: termIdForDb,
+        period_type: periodType,
+        period_id: periodId,
         pdf_path: storageRelativePath,
         generated_at: new Date().toISOString(),
       },
-      { onConflict: "student_id,term_id" }
+      { onConflict: "student_id,period_type,period_id" }
     )
     .select()
     .single();
@@ -878,4 +926,67 @@ export async function getBulletinSignedUrl(pdfPath: string): Promise<string> {
   }
 
   return data.signedUrl;
+}
+
+export interface StudentBulletinStatus {
+  studentId: string;
+  isGenerated: boolean;
+  pdfPath?: string;
+  generatedAt?: string;
+}
+
+/**
+ * Récupère le statut de génération des bulletins pour tous les élèves d'une classe et d'une période précise.
+ */
+export async function fetchClassBulletinsStatus(
+  classId: string,
+  periodType: "sequence" | "term",
+  periodId: string
+): Promise<Record<string, StudentBulletinStatus>> {
+  // 1. Récupérer les élèves de la classe
+  const { data: students, error: studErr } = await supabase
+    .from("students")
+    .select("id")
+    .eq("class_id", classId)
+    .eq("status", "active");
+
+  if (studErr || !students) {
+    throw new Error(`Impossible de charger les élèves de la classe: ${studErr?.message}`);
+  }
+
+  const studentIds = students.map((s) => s.id);
+  if (studentIds.length === 0) return {};
+
+  // 2. Récupérer les enregistrements de génération pour cette période
+  const { data: generations, error: genErr } = await supabase
+    .from("bulletin_generations")
+    .select("student_id, pdf_path, generated_at")
+    .eq("period_type", periodType)
+    .eq("period_id", periodId)
+    .in("student_id", studentIds);
+
+  if (genErr) {
+    console.error("Erreur lors de la récupération des statuts de bulletins:", genErr);
+  }
+
+  const statusMap: Record<string, StudentBulletinStatus> = {};
+
+  studentIds.forEach((sid) => {
+    const gen = generations?.find((g) => g.student_id === sid);
+    if (gen) {
+      statusMap[sid] = {
+        studentId: sid,
+        isGenerated: true,
+        pdfPath: gen.pdf_path,
+        generatedAt: gen.generated_at,
+      };
+    } else {
+      statusMap[sid] = {
+        studentId: sid,
+        isGenerated: false,
+      };
+    }
+  });
+
+  return statusMap;
 }

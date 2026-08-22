@@ -143,7 +143,7 @@ export const NewStudentModal: React.FC<NewStudentModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={editingStudent ? "Modifier la fiche élève" : "Inscrire un nouvel élève"}
-      size="md"
+      size="lg"
     >
       <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
         {formError && (

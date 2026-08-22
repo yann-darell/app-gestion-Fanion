@@ -51,7 +51,7 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
       setClassNameMap(map);
 
       if (stData.photo_path) {
-        const url = await getStudentPhotoUrl(stData.photo_path);
+        const url = await getStudentPhotoUrl(stData.photo_path as string);
         setPhotoUrl(url);
       } else {
         setPhotoUrl(null);
@@ -179,7 +179,7 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
               label="Nationalité"
               value={student.nationality || "—"}
             />
-            <InfoField label="Matricule" value={student.matricule} mono />
+            <InfoField label="Matricule" value={student.matricule || "—"} mono />
             <InfoField
               label="Classe"
               value={classNameMap[student.class_id] || "Non affecté"}
