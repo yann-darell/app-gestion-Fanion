@@ -151,6 +151,10 @@ Un élève est `status = 'pending_registration'` tant que les frais d'inscriptio
 
 PDF généré via `pdf-lib`, doit intégrer le **logo officiel de l'école** (fichier fourni, à stocker dans le projet), numérotation strictement séquentielle via `receipt_counters`, jamais réutilisée même après suppression d'un paiement.
 
+### 6.5 Ordre d'imputation d'une réduction de scolarité (hypothèse de travail, non figée)
+
+En cas de réduction individuelle de scolarité (`student_fee_overrides.total_amount_override`), l'exigibilité des tranches est **réduite de la DERNIÈRE tranche vers la PREMIÈRE** : les premières tranches restent inchangées tant que la somme plafonnée le permet, et la/les dernière(s) tranche(s) voient leur montant exigible réduit ou annulé. Aucun montant exigible ne peut être négatif. **À valider avec la Principale et le DE** lors de la validation du module Finance.
+
 ---
 
 ## 7. Fournitures — double mode
