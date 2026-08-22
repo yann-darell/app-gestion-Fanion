@@ -9,6 +9,7 @@ import {
   SubjectRecord,
   SubjectGroupRecord,
   CoefficientRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 import PageContainer from "../../components/ui/PageContainer";
 import PageHeader from "../../components/ui/PageHeader";
@@ -37,8 +38,8 @@ const GROUP_ORDER = ["I", "II", "III", "IV"];
 export const CoefficientsPage: React.FC<CoefficientsPageProps> = ({ userRole }) => {
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [groups, setGroups] = useState<SubjectGroupRecord[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
-  const [selectedDivision, setSelectedDivision] = useState<string>("college");
+  const [selectedClassId, setSelectedClassId] = useSelectionPersistence("classId", "");
+  const [selectedDivision, setSelectedDivision] = useSelectionPersistence("division", "college");
 
   const [groupedRows, setGroupedRows] = useState<GroupedRows>({});
   const [totalCoef, setTotalCoef] = useState<number>(0);
@@ -60,8 +61,6 @@ export const CoefficientsPage: React.FC<CoefficientsPageProps> = ({ userRole }) 
         ]);
         setClasses(classData);
         setGroups(groupData);
-        setSelectedClassId("");
-        setGroupedRows({});
       } catch (err: any) {
         setPageError("Impossible de charger les données initiales.");
       } finally {

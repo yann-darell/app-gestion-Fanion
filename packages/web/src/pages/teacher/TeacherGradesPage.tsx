@@ -12,6 +12,7 @@ import {
   AssignedStudentRecord,
   SequenceRecord,
   GradeRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 
 interface TeacherGradesPageProps {
@@ -20,10 +21,10 @@ interface TeacherGradesPageProps {
 
 export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }) => {
   const [assignments, setAssignments] = useState<TeacherAssignmentRecord[]>([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence("assignmentId", "");
 
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
-  const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
+  const [selectedSequenceId, setSelectedSequenceId] = useSelectionPersistence("sequenceId", "");
 
   const [students, setStudents] = useState<AssignedStudentRecord[]>([]);
   const [gradesMap, setGradesMap] = useState<Record<string, number>>({});
@@ -60,7 +61,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       setAssignments(assignmentsData);
 
       if (assignmentsData.length > 0) {
-        setSelectedAssignmentId(assignmentsData[0].id);
+        setSelectedAssignmentId((prev) => (prev && assignmentsData.some(a => a.id === prev) ? prev : assignmentsData[0].id));
       }
 
       // Charger séquences
@@ -68,7 +69,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       setSequences(seqsData);
 
       if (seqsData.length > 0) {
-        setSelectedSequenceId(seqsData[0].id);
+        setSelectedSequenceId((prev) => (prev && seqsData.some(s => s.id === prev) ? prev : seqsData[0].id));
       }
     } catch (err: any) {
       console.error("Erreur chargement attributions:", err);

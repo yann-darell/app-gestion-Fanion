@@ -15,6 +15,7 @@ import {
   listSequences,
   TeacherAssignmentRecord,
   SequenceRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 import { generateClassReport } from "@fanion/shared/services/classReportService";
 
@@ -29,7 +30,7 @@ interface EvolutionDataPoint {
 
 export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ userRole }) => {
   const [assignments, setAssignments] = useState<TeacherAssignmentRecord[]>([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence("assignmentId", "");
 
   const [evolutionData, setEvolutionData] = useState<EvolutionDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +61,7 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       setAssignments(assignmentsData);
 
       if (assignmentsData.length > 0) {
-        setSelectedAssignmentId(assignmentsData[0].id);
+        setSelectedAssignmentId((prev) => (prev && assignmentsData.some(a => a.id === prev) ? prev : assignmentsData[0].id));
       }
     } catch (err: any) {
       console.error("Erreur attributions:", err);

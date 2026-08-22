@@ -7,6 +7,7 @@ import {
   getStudentPhotoUrl,
   StudentRecord,
   ClassRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 import StudentFilters from "./components/StudentFilters";
 import NewStudentModal from "./components/NewStudentModal";
@@ -21,7 +22,7 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [classIdFilter, setClassIdFilter] = useState<string>("all");
+  const [classIdFilter, setClassIdFilter] = useSelectionPersistence("classId", "all");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modal

@@ -15,6 +15,7 @@ import {
   listSequences,
   TeacherAssignmentRecord,
   SequenceRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 import { generateClassReport } from "@fanion/shared/services/classReportService";
 import PageContainer from "../../components/ui/PageContainer";
@@ -31,7 +32,7 @@ interface EvolutionDataPoint {
 
 export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ userRole }) => {
   const [assignments, setAssignments] = useState<TeacherAssignmentRecord[]>([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence("assignmentId", "");
   const [evolutionData, setEvolutionData] = useState<EvolutionDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -56,7 +57,9 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       const filters = userRole === "enseignant" ? { teacher_id: user.id } : {};
       const assignmentsData = await listTeacherAssignments(filters);
       setAssignments(assignmentsData);
-      if (assignmentsData.length > 0) setSelectedAssignmentId(assignmentsData[0].id);
+      if (assignmentsData.length > 0) {
+        setSelectedAssignmentId((prev) => (prev && assignmentsData.some(a => a.id === prev) ? prev : assignmentsData[0].id));
+      }
     } catch (err: any) {
       setError("Impossible de charger vos attributions.");
     } finally {

@@ -6,6 +6,7 @@ import {
   ClassRecord,
   TermRecord,
   SequenceRecord,
+  useSelectionPersistence,
 } from "@fanion/shared";
 import {
   generateClassReport,
@@ -27,14 +28,14 @@ interface ClassReportPageProps {
 }
 
 export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) => {
-  const [selectedDivision, setSelectedDivision] = useState<string>("college");
+  const [selectedDivision, setSelectedDivision] = useSelectionPersistence("division", "college");
   const [classes, setClasses] = useState<ClassRecord[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [selectedClassId, setSelectedClassId] = useSelectionPersistence("classId", "");
 
-  const [periodType, setPeriodType] = useState<"sequence" | "term">("sequence");
+  const [periodType, setPeriodType] = useSelectionPersistence<"sequence" | "term">("periodType", "sequence");
   const [terms, setTerms] = useState<TermRecord[]>([]);
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
+  const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence("periodId", "");
 
   const [reportData, setReportData] = useState<ClassReportData | null>(null);
   const [loadingInit, setLoadingInit] = useState(true);
@@ -57,10 +58,6 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         setClasses(classData);
         setTerms(termData);
         setSequences(seqData);
-
-        setSelectedClassId("");
-        setSelectedPeriodId("");
-        setReportData(null);
       } catch (err: any) {
         console.error("Erreur d'initialisation du bordereau web:", err);
         setError("Impossible de charger les données de configuration.");
@@ -74,15 +71,11 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
   useEffect(() => {
     if (periodType === "sequence") {
       if (sequences.length > 0) {
-        setSelectedPeriodId(sequences[0].id);
-      } else {
-        setSelectedPeriodId("");
+        setSelectedPeriodId((prev) => (prev && sequences.some(s => s.id === prev) ? prev : sequences[0].id));
       }
     } else {
       if (terms.length > 0) {
-        setSelectedPeriodId(terms[0].id);
-      } else {
-        setSelectedPeriodId("");
+        setSelectedPeriodId((prev) => (prev && terms.some(t => t.id === prev) ? prev : terms[0].id));
       }
     }
   }, [periodType, sequences, terms]);

@@ -58,9 +58,16 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
 
   // --- Évaluations & Examens ---
   {
+    id: "bulletins-pdf",
+    to: "/bulletins",
+    label: "Bulletins PDF",
+    category: "Évaluations & Examens",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+  {
     id: "grades",
     to: "/grades",
-    label: "Bulletins & Notes",
+    label: "Saisie Direction",
     category: "Évaluations & Examens",
     allowedRoles: ["principal", "directeur_etudes"],
   },

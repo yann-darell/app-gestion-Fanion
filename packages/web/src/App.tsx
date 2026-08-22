@@ -14,6 +14,7 @@ import UserAccountsPage from "./pages/users/UserAccountsPage";
 import TeacherGradesPage from "./pages/teacher/TeacherGradesPage";
 import TeacherEvolutionPage from "./pages/teacher/TeacherEvolutionPage";
 import ClassReportPage from "./pages/reports/ClassReportPage";
+import BulletinsPdfPage from "./pages/reports/BulletinsPdfPage";
 
 type Profile = {
   id: string;
@@ -423,6 +424,7 @@ export default function App() {
             <Route path="assignments/overview" element={<TeacherOverviewPage userRole={profile?.role} />} />
             
             <Route path="reports/class" element={<ClassReportPage userRole={profile?.role} />} />
+            <Route path="bulletins" element={<BulletinsPdfPage userRole={profile?.role} />} />
             
             <Route path="users" element={<UserAccountsPage userRole={profile?.role} />} />
 
