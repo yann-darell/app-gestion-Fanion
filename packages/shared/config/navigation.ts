@@ -81,6 +81,13 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
 
   // --- Finance & Administration ---
   {
+    id: "fee-schedule",
+    to: "/finance/fee-schedule",
+    label: "Tarifs des classes",
+    category: "Finance & Administration",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+  {
     id: "finance",
     to: "/finance",
     label: "Finance & Scolarité",

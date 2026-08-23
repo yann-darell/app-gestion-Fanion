@@ -3,18 +3,6 @@ import {
   listSubjects,
   SubjectRecord,
 } from "@fanion/shared";
-import PageContainer from "../../components/ui/PageContainer";
-import PageHeader from "../../components/ui/PageHeader";
-import { Button } from "../../components/ui/Button";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "../../components/ui/Table";
-import { Badge } from "../../components/ui/Badge";
 import { SubjectModal } from "./components/SubjectModal";
 
 interface SubjectsPageProps {
@@ -66,45 +54,55 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ userRole }) => {
     setIsModalOpen(true);
   };
 
+  const filters = [
+    { key: "all", label: "Toutes" },
+    { key: "college", label: "Collège" },
+    { key: "primaire", label: "Primaire" },
+  ] as const;
+
   return (
-    <PageContainer>
-      <PageHeader
-        title="Gestion des Matières"
-        actions={
-          isWriteAuthorized && (
-            <Button onClick={handleCreate} className="flex items-center gap-2">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="flex flex-col gap-4 pb-4 border-b border-line mb-6">
+        <div className="flex items-center justify-between min-h-[40px]">
+          <h1 className="font-display text-xl md:text-2xl font-semibold text-ink leading-tight">
+            Gestion des Matières
+          </h1>
+          {isWriteAuthorized && (
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-1.5 px-3 py-2 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
               </svg>
-              Nouvelle matière
-            </Button>
-          )
-        }
-      />
+              <span className="hidden sm:inline">Nouvelle matière</span>
+              <span className="sm:hidden">Créer</span>
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 mb-6 p-2 bg-paper rounded border border-line">
-        <span className="text-xs font-semibold text-slate uppercase tracking-wider px-2">
+      <div className="flex items-center gap-2 mb-6 p-2 bg-paper-dark rounded border border-line overflow-x-auto">
+        <span className="text-[10px] font-semibold text-slate uppercase tracking-wider px-2 flex-shrink-0">
           Division :
         </span>
-        {(["all", "college", "primaire"] as const).map((div) => (
+        {filters.map((f) => (
           <button
-            key={div}
-            id={`filter-division-${div}`}
-            onClick={() => setFilterDivision(div)}
-            className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 ${
-              filterDivision === div
+            key={f.key}
+            onClick={() => setFilterDivision(f.key)}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 flex-shrink-0 ${
+              filterDivision === f.key
                 ? "bg-ink text-white"
-                : "text-slate hover:bg-line/40"
+                : "text-slate hover:bg-paper"
             }`}
           >
-            {div === "all" ? "Toutes" : DIVISION_LABELS[div]}
+            {f.label}
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
+        <div className="mb-6 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
           {error}
         </div>
       )}
@@ -115,58 +113,111 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ userRole }) => {
         </div>
       ) : subjects.length === 0 ? (
         <div className="py-12 border border-dashed border-line rounded bg-white text-center">
-          <p className="text-sm text-slate font-medium">Aucune matière configurée pour cette division</p>
+          <p className="text-sm text-slate font-medium">Aucune matière configurée</p>
           {isWriteAuthorized && (
             <button
               onClick={handleCreate}
               className="mt-3 text-xs font-semibold text-ink hover:underline"
             >
-              Créer la première matière
+              Créer la toute première matière
             </button>
           )}
         </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Division</TableHead>
-              {isWriteAuthorized && (
-                <TableHead className="w-24 text-right">Actions</TableHead>
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {subjects.map((subject) => (
-              <TableRow key={subject.id}>
-                <TableCell className="font-semibold text-ink">
-                  {subject.name}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={subject.division_id === "college" ? "green" : "gray"}
+        <>
+          <div className="hidden md:block w-full overflow-x-auto border border-line rounded">
+            <table className="w-full border-collapse text-left">
+              <thead className="bg-paper-dark text-ink border-b border-line sticky top-0 z-10">
+                <tr>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Nom
+                  </th>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Division
+                  </th>
+                  {isWriteAuthorized && (
+                    <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5 w-20 text-right">
+                      Actions
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line bg-white">
+                {subjects.map((subject) => (
+                  <tr
+                    key={subject.id}
+                    className="hover:bg-paper/50 transition-colors duration-100"
                   >
-                    {DIVISION_LABELS[subject.division_id] || subject.division_id}
-                  </Badge>
-                </TableCell>
-                {isWriteAuthorized && (
-                  <TableCell className="text-right">
-                    <button
-                      id={`edit-subject-${subject.id}`}
-                      onClick={() => handleEdit(subject)}
-                      className="p-1 text-slate hover:text-ink hover:bg-paper rounded transition duration-150 inline-flex items-center justify-center"
-                      title="Modifier la matière"
+                    <td className="px-4 py-2.5 text-sm font-semibold text-ink">
+                      {subject.name}
+                    </td>
+                    <td className="px-4 py-2.5 text-sm">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          subject.division_id === "college"
+                            ? "bg-ink/10 text-ink"
+                            : "bg-fanion-green/10 text-fanion-green"
+                        }`}
+                      >
+                        {DIVISION_LABELS[subject.division_id] || subject.division_id}
+                      </span>
+                    </td>
+                    {isWriteAuthorized && (
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          onClick={() => handleEdit(subject)}
+                          className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
+                          title="Modifier"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden flex flex-col gap-3">
+            {subjects.map((subject) => (
+              <div
+                key={subject.id}
+                className="bg-white border border-line rounded p-4 flex justify-between items-start gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-ink truncate">
+                      {subject.name}
+                    </p>
+                    <span
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                        subject.division_id === "college"
+                          ? "bg-ink/10 text-ink"
+                          : "bg-fanion-green/10 text-fanion-green"
+                      }`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                  </TableCell>
+                      {DIVISION_LABELS[subject.division_id] || subject.division_id}
+                    </span>
+                  </div>
+                </div>
+                {isWriteAuthorized && (
+                  <button
+                    onClick={() => handleEdit(subject)}
+                    className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition flex-shrink-0"
+                    title="Modifier"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
                 )}
-              </TableRow>
+              </div>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+        </>
       )}
 
       <SubjectModal
@@ -176,7 +227,7 @@ export const SubjectsPage: React.FC<SubjectsPageProps> = ({ userRole }) => {
         editingSubject={editingSubject}
         defaultDivision={filterDivision !== "all" ? filterDivision : "college"}
       />
-    </PageContainer>
+    </div>
   );
 };
 

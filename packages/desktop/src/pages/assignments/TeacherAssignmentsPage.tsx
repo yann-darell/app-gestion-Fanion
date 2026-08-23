@@ -10,9 +10,6 @@ import {
   CoefficientRecord,
   AssignmentRecord,
 } from "@fanion/shared";
-import PageContainer from "../../components/ui/PageContainer";
-import PageHeader from "../../components/ui/PageHeader";
-import { Badge } from "../../components/ui/Badge";
 
 interface TeacherAssignmentsPageProps {
   userRole?: string;
@@ -42,7 +39,6 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
   const isAuthorized =
     userRole === "principal" || userRole === "directeur_etudes";
 
-  // Charger les classes de la division et la liste des enseignants au chargement
   useEffect(() => {
     const fetchInit = async () => {
       setLoadingInit(true);
@@ -58,8 +54,8 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         setCoefficients([]);
         setAssignments([]);
       } catch (err: any) {
-        console.error("Erreur d'initialisation attributions:", err);
-        setError("Impossible de charger les classes ou la liste des enseignants.");
+        console.error("Erreur initialisation desktop attributions:", err);
+        setError("Impossible de charger les classes et enseignants.");
       } finally {
         setLoadingInit(false);
       }
@@ -67,7 +63,6 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     fetchInit();
   }, [selectedDivision]);
 
-  // Charger les coefficients et attributions quand une classe est sélectionnée
   const fetchClassAssignments = useCallback(async (classId: string) => {
     if (!classId) return;
     setLoadingData(true);
@@ -80,7 +75,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
       setCoefficients(coefData);
       setAssignments(assignData);
     } catch (err: any) {
-      console.error("Erreur de chargement des attributions:", err);
+      console.error("Erreur chargement attributions desktop:", err);
       setError("Erreur lors du chargement des matières et attributions.");
     } finally {
       setLoadingData(false);
@@ -93,49 +88,43 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     }
   }, [selectedClassId, fetchClassAssignments]);
 
-  // Gérer la modification d'attribution pour une matière
   const handleTeacherChange = async (subjectId: string, newTeacherId: string) => {
     if (!selectedClassId) return;
     setSavingSubjectId(subjectId);
     setError(null);
 
     try {
-      // Trouver l'attribution existante pour cette matière (le cas échéant)
       const existing = assignments.find((a) => a.subject_id === subjectId);
 
       if (newTeacherId === "") {
-        // Supprimer l'attribution si elle existe
         if (existing) {
           await deleteAssignment(existing.id);
           setAssignments((prev) => prev.filter((a) => a.id !== existing.id));
         }
       } else {
-        // Si une attribution existait déjà pour un autre enseignant, on la supprime d'abord
         if (existing) {
           if (existing.teacher_id === newTeacherId) {
             setSavingSubjectId(null);
-            return; // Aucun changement
+            return;
           }
           await deleteAssignment(existing.id);
         }
 
-        // Créer la nouvelle attribution
         const created = await createAssignment({
           class_id: selectedClassId,
           subject_id: subjectId,
           teacher_id: newTeacherId,
         });
 
-        // Mettre à jour les attributions locales
         setAssignments((prev) => {
           const filtered = prev.filter((a) => a.subject_id !== subjectId);
           return [...filtered, created];
         });
       }
     } catch (err: any) {
-      console.error("Erreur de modification d'attribution:", err);
+      console.error("Erreur modification attribution desktop:", err);
       setError(
-        err?.message || "Impossible de mettre à jour l'attribution de l'enseignant."
+        err?.message || "Impossible de mettre à jour l'attribution."
       );
     } finally {
       setSavingSubjectId(null);
@@ -144,30 +133,37 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
 
   if (!isAuthorized) {
     return (
-      <PageContainer>
-        <PageHeader title="Attribution des Enseignants" />
-        <div className="p-6 bg-signal-red/10 border border-signal-red/20 rounded text-signal-red font-medium text-sm">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <h1 className="font-display text-xl font-bold text-ink mb-4">
+          Attribution des Enseignants
+        </h1>
+        <div className="p-4 bg-signal-red/10 border border-signal-red/20 rounded text-signal-red text-sm font-medium">
           Accès restreint. Seuls le Principal et le Directeur des Études peuvent gérer les attributions d'enseignants.
         </div>
-      </PageContainer>
+      </div>
     );
   }
 
   return (
-    <PageContainer>
-      <PageHeader title="Affectations des Enseignants" />
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="pb-4 border-b border-line mb-6">
+        <h1 className="font-display text-xl md:text-2xl font-bold text-ink">
+          Attribution des Enseignants
+        </h1>
+        <p className="text-xs md:text-sm text-slate mt-1">
+          Affectez les enseignants aux matières pour la classe sélectionnée.
+        </p>
+      </div>
 
-      {/* Barre de filtre Division + Classe */}
-      <div className="flex flex-wrap items-end gap-4 mb-6">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6 bg-paper-dark p-4 rounded border border-line">
+        <div className="flex-shrink-0">
           <label className="block text-xs font-semibold text-slate uppercase mb-1">
             Division
           </label>
-          <div className="flex gap-1 p-1 bg-paper border border-line rounded">
+          <div className="flex gap-1 p-1 bg-white border border-line rounded">
             {["college", "primaire"].map((div) => (
               <button
                 key={div}
-                id={`assign-division-${div}`}
                 onClick={() => {
                   setSelectedDivision(div);
                   setSelectedClassId("");
@@ -175,7 +171,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
                 className={`px-3 py-1.5 rounded text-xs font-medium transition ${
                   selectedDivision === div
                     ? "bg-ink text-white font-semibold"
-                    : "text-slate hover:bg-line/40"
+                    : "text-slate hover:bg-paper-dark"
                 }`}
               >
                 {div === "college" ? "Collège" : "Primaire"}
@@ -184,18 +180,14 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 min-w-[220px]">
-          <label
-            htmlFor="select-class-assignment"
-            className="block text-xs font-semibold text-slate uppercase mb-1"
-          >
+        <div className="flex-1">
+          <label className="block text-xs font-semibold text-slate uppercase mb-1">
             Classe
           </label>
           <select
-            id="select-class-assignment"
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink"
+            className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:border-ink h-10"
             disabled={loadingInit}
           >
             <option value="">— Sélectionner une classe —</option>
@@ -209,7 +201,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
+        <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
           {error}
         </div>
       )}
@@ -217,12 +209,12 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
       {!selectedClassId ? (
         <div className="py-12 border border-dashed border-line rounded bg-white text-center">
           <p className="text-sm text-slate font-medium">
-            Veuillez sélectionner une classe pour afficher ses matières et attribuer les enseignants.
+            Sélectionnez une classe pour gérer ses attributions
           </p>
         </div>
       ) : loadingData ? (
         <div className="py-12 text-center text-sm font-medium text-slate">
-          Chargement des matières et attributions...
+          Chargement des attributions...
         </div>
       ) : coefficients.length === 0 ? (
         <div className="py-12 px-6 border border-line rounded bg-white text-center flex flex-col items-center">
@@ -249,80 +241,144 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         </div>
       ) : (
         <div className="border border-line rounded bg-white overflow-hidden shadow-sm">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-line bg-paper text-xs font-semibold text-slate uppercase tracking-wider">
-                <th className="px-4 py-3">Matière</th>
-                <th className="px-4 py-3 w-32">Groupe</th>
-                <th className="px-4 py-3 w-24 text-center">Coef.</th>
-                <th className="px-4 py-3">Enseignant attribué</th>
-                <th className="px-4 py-3 w-32 text-center">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {coefficients.map((coef) => {
-                const subject = coef.subjects;
-                const group = coef.subject_groups;
-                if (!subject) return null;
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-paper-dark border-b border-line text-xs font-semibold text-slate uppercase">
+                <tr>
+                  <th className="px-4 py-3">Matière</th>
+                  <th className="px-4 py-3 w-32">Groupe</th>
+                  <th className="px-4 py-3 w-24 text-center">Coef.</th>
+                  <th className="px-4 py-3">Enseignant attribué</th>
+                  <th className="px-4 py-3 w-32 text-center">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {coefficients.map((coef) => {
+                  const subject = coef.subjects;
+                  const group = coef.subject_groups;
+                  if (!subject) return null;
 
-                const currentAssignment = assignments.find(
-                  (a) => a.subject_id === subject.id
-                );
-                const currentTeacherId = currentAssignment?.teacher_id || "";
-                const isSaving = savingSubjectId === subject.id;
+                  const currentAssignment = assignments.find(
+                    (a) => a.subject_id === subject.id
+                  );
+                  const currentTeacherId = currentAssignment?.teacher_id || "";
+                  const isSaving = savingSubjectId === subject.id;
 
-                return (
-                  <tr
-                    key={coef.id}
-                    className="border-b border-line/60 last:border-b-0 hover:bg-paper/40 transition"
-                  >
-                    <td className="px-4 py-3 text-sm font-semibold text-ink">
-                      {subject.name}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-mono font-bold text-slate">
-                      Groupe {group?.label ?? "I"}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono font-bold text-center">
-                      {coef.coefficient}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        id={`select-teacher-${subject.id}`}
-                        value={currentTeacherId}
-                        onChange={(e) =>
-                          handleTeacherChange(subject.id, e.target.value)
-                        }
-                        disabled={isSaving}
-                        className="w-full max-w-xs px-3 py-1.5 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink font-medium"
-                      >
-                        <option value="">— Non assigné —</option>
-                        {teachers.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.full_name}
-                          </option>
-                        ))}
-                      </select>
-                      {isSaving && (
-                        <span className="ml-2 text-xs text-slate italic">
-                          Enregistrement...
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {currentTeacherId ? (
-                        <Badge variant="green">Assigné</Badge>
-                      ) : (
-                        <Badge variant="gray">Non assigné</Badge>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  return (
+                    <tr key={coef.id} className="hover:bg-paper-dark/30 transition">
+                      <td className="px-4 py-3 text-sm font-semibold text-ink">
+                        {subject.name}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono font-bold text-slate">
+                        Groupe {group?.label ?? "I"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono font-bold text-center">
+                        {coef.coefficient}
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={currentTeacherId}
+                          onChange={(e) =>
+                            handleTeacherChange(subject.id, e.target.value)
+                          }
+                          disabled={isSaving}
+                          className="w-full max-w-xs px-3 py-1.5 border border-line rounded text-sm bg-white focus:outline-none focus:border-ink"
+                        >
+                          <option value="">— Non assigné —</option>
+                          {teachers.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.full_name}
+                            </option>
+                          ))}
+                        </select>
+                        {isSaving && (
+                          <span className="ml-2 text-xs text-slate italic">
+                            Enreg...
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {currentTeacherId ? (
+                          <span className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            Assigné
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded text-xs font-semibold bg-slate/10 text-slate">
+                            Non assigné
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden divide-y divide-line">
+            {coefficients.map((coef) => {
+              const subject = coef.subjects;
+              const group = coef.subject_groups;
+              if (!subject) return null;
+
+              const currentAssignment = assignments.find(
+                (a) => a.subject_id === subject.id
+              );
+              const currentTeacherId = currentAssignment?.teacher_id || "";
+              const isSaving = savingSubjectId === subject.id;
+
+              return (
+                <div key={coef.id} className="p-4 flex flex-col gap-3 bg-white">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-sm font-bold text-ink">{subject.name}</h3>
+                      <p className="text-xs text-slate font-mono">
+                        Groupe {group?.label ?? "I"} · Coef {coef.coefficient}
+                      </p>
+                    </div>
+                    {currentTeacherId ? (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                        Assigné
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate/10 text-slate">
+                        Non assigné
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate uppercase font-semibold mb-1">
+                      Enseignant
+                    </label>
+                    <select
+                      value={currentTeacherId}
+                      onChange={(e) =>
+                        handleTeacherChange(subject.id, e.target.value)
+                      }
+                      disabled={isSaving}
+                      className="w-full text-xs border border-line rounded px-3 py-2 bg-white focus:outline-none focus:border-ink h-10 font-medium"
+                    >
+                      <option value="">— Non assigné —</option>
+                      {teachers.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.full_name}
+                        </option>
+                      ))}
+                    </select>
+                    {isSaving && (
+                      <p className="text-[11px] text-slate italic mt-1">
+                        Enregistrement en cours...
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
-    </PageContainer>
+    </div>
   );
 };
 

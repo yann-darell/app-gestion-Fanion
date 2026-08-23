@@ -57,11 +57,9 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
         response.message || `L'invitation a été envoyée avec succès à ${email}.`
       );
 
-      // Reset form
       setEmail("");
       setFullName("");
 
-      // Refresh list
       await fetchUsersList();
     } catch (err: any) {
       console.error("Erreur invitation enseignant desktop:", err);
@@ -73,8 +71,8 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
 
   if (!isAuthorized) {
     return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <h1 className="font-display text-2xl font-bold text-ink mb-4">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <h1 className="font-display text-xl md:text-2xl font-bold text-ink mb-4">
           Gestion des Comptes Utilisateurs
         </h1>
         <div className="p-4 bg-signal-red/10 border border-signal-red/20 rounded text-signal-red text-sm font-medium">
@@ -84,7 +82,6 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
     );
   }
 
-  // Filtered Users
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -125,25 +122,24 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-line flex items-center justify-between">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+      <div className="pb-4 border-b border-line flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
-          <h1 className="font-display text-2xl font-bold text-ink">
+          <h1 className="font-display text-xl md:text-2xl font-bold text-ink">
             Gestion des Comptes Utilisateurs
           </h1>
-          <p className="text-sm text-slate mt-1">
+          <p className="text-xs md:text-sm text-slate mt-1">
             Invitez de nouveaux enseignants et visualisez l'ensemble des comptes de la plateforme.
           </p>
         </div>
-        <span className="px-3 py-1 bg-ink text-white rounded text-xs font-semibold uppercase tracking-wider">
-          Lot D2bis
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 bg-ink text-white rounded text-xs font-semibold uppercase tracking-wider">
+            Lot D2bis
+          </span>
+        </div>
       </div>
 
-      {/* Grid Invitation Form + Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Invitation Form Card */}
         <div className="lg:col-span-1 bg-white border border-line rounded p-5 shadow-sm h-fit">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-line">
             <svg
@@ -260,19 +256,17 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
           </form>
         </div>
 
-        {/* Existing Accounts List */}
         <div className="lg:col-span-2 bg-white border border-line rounded p-5 shadow-sm">
-          <div className="flex flex-row items-center justify-between gap-3 mb-4 pb-3 border-b border-line">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-line">
             <div>
               <h2 className="font-display text-base font-bold text-ink">
-                Comptes Enseignants & Staff ({filteredUsers.length})
+                Comptes Enseignants &amp; Staff ({filteredUsers.length})
               </h2>
               <p className="text-xs text-slate">
                 Liste des comptes actifs et invités enregistrés.
               </p>
             </div>
 
-            {/* Filters */}
             <div className="flex items-center gap-2">
               <select
                 value={roleFilter}
@@ -287,7 +281,6 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
             </div>
           </div>
 
-          {/* Search bar */}
           <div className="mb-4">
             <input
               type="text"
@@ -316,7 +309,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
             </div>
           ) : (
             <div className="overflow-hidden border border-line rounded">
-              <div className="overflow-x-auto">
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left">
                   <thead className="bg-paper-dark border-b border-line text-xs font-semibold text-slate uppercase">
                     <tr>
@@ -343,6 +336,23 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="md:hidden divide-y divide-line">
+                {filteredUsers.map((u) => (
+                  <div key={u.id} className="p-3.5 flex flex-col gap-1.5 bg-white">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-ink">{u.full_name}</span>
+                      {getRoleBadge(u.role)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate font-mono">
+                      <span>{u.email || "— email non disponible —"}</span>
+                      <span className="text-[11px] font-sans">
+                        {new Date(u.created_at).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

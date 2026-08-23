@@ -98,6 +98,22 @@ export async function getActiveSchoolYear() {
 }
 
 /**
+ * Récupère toutes les années scolaires enregistrées.
+ */
+export async function listSchoolYears() {
+  const { data, error } = await supabase
+    .from("school_years")
+    .select("*")
+    .order("start_date", { ascending: false });
+
+  if (error) {
+    console.error("Erreur listSchoolYears:", error);
+    throw error;
+  }
+  return data as SchoolYearRecord[];
+}
+
+/**
  * Récupère toutes les divisions configurées.
  */
 export async function listDivisions() {
@@ -111,3 +127,4 @@ export async function listDivisions() {
   }
   return data as DivisionRecord[];
 }
+

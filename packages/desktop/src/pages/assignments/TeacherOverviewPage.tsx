@@ -4,9 +4,6 @@ import {
   listAssignments,
   AssignmentRecord,
 } from "@fanion/shared";
-import PageContainer from "../../components/ui/PageContainer";
-import PageHeader from "../../components/ui/PageHeader";
-import { Badge } from "../../components/ui/Badge";
 
 interface TeacherOverviewPageProps {
   userRole?: string;
@@ -55,8 +52,8 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
 
       setTeachersData(combined);
     } catch (err: any) {
-      console.error("Erreur de chargement de la vue d'ensemble:", err);
-      setError("Impossible de charger la vue d'ensemble des enseignants.");
+      console.error("Erreur chargement vue d'ensemble desktop:", err);
+      setError("Impossible de charger la vue d'ensemble.");
     } finally {
       setLoading(false);
     }
@@ -80,21 +77,30 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
 
   if (!isAuthorized) {
     return (
-      <PageContainer>
-        <PageHeader title="Vue d'ensemble des Enseignants" />
-        <div className="p-6 bg-signal-red/10 border border-signal-red/20 rounded text-signal-red font-medium text-sm">
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <h1 className="font-display text-xl font-bold text-ink mb-4">
+          Vue d'ensemble des Enseignants
+        </h1>
+        <div className="p-4 bg-signal-red/10 border border-signal-red/20 rounded text-signal-red text-sm font-medium">
           Accès restreint. Seuls le Principal et le Directeur des Études peuvent consulter la vue d'ensemble.
         </div>
-      </PageContainer>
+      </div>
     );
   }
 
   return (
-    <PageContainer>
-      <PageHeader title="Vue d'Ensemble des Enseignants" />
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="pb-4 border-b border-line mb-6">
+        <h1 className="font-display text-xl md:text-2xl font-bold text-ink">
+          Vue d'ensemble des Enseignants
+        </h1>
+        <p className="text-xs md:text-sm text-slate mt-1">
+          Visualisez les attributions de cours pour l'ensemble du corps enseignant.
+        </p>
+      </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
+        <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
           {error}
         </div>
       )}
@@ -120,74 +126,104 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
                 key={teacher.id}
                 className="border border-line rounded bg-white overflow-hidden shadow-sm transition"
               >
-                {/* En-tête de la carte Enseignant */}
                 <div
                   onClick={() => toggleExpand(teacher.id)}
-                  className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-paper/50 transition select-none"
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-paper-dark/30 transition select-none"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-ink text-white font-bold flex items-center justify-center text-base">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-ink text-white font-bold flex items-center justify-center text-sm">
                       {teacher.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="text-base font-semibold text-ink">
+                      <h3 className="text-sm md:text-base font-semibold text-ink">
                         {teacher.full_name}
                       </h3>
-                      <p className="text-xs text-slate">
-                        Composante pédagogique / Enseignant
+                      <p className="text-[11px] text-slate">
+                        Composante pédagogique
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <Badge variant={count > 0 ? "green" : "gray"}>
-                      {count} attribution{count > 1 ? "s" : ""}
-                    </Badge>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-ink hover:underline"
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`px-2.5 py-1 rounded text-xs font-semibold ${
+                        count > 0
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-slate/10 text-slate"
+                      }`}
                     >
-                      {isExpanded ? "Masquer le détail ▲" : "Voir le détail ▼"}
-                    </button>
+                      {count} attribution{count > 1 ? "s" : ""}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-slate transition-transform duration-200 ${
+                        isExpanded ? "transform rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
                   </div>
                 </div>
 
-                {/* Détail des attributions */}
                 {isExpanded && (
-                  <div className="border-t border-line bg-paper/30 px-5 py-4">
+                  <div className="border-t border-line bg-paper-dark/20 p-4">
                     {count === 0 ? (
                       <p className="text-xs text-slate italic">
-                        Cet enseignant n'a aucune matière ni classe attribuée actuellement.
+                        Aucune matière attribuée à cet enseignant.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse bg-white border border-line rounded">
-                          <thead>
-                            <tr className="border-b border-line bg-paper text-xs font-semibold text-slate uppercase tracking-wider">
-                              <th className="px-4 py-2">Classe</th>
-                              <th className="px-4 py-2">Niveau</th>
-                              <th className="px-4 py-2">Matière</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {teacher.assignments.map((assign) => (
-                              <tr
-                                key={assign.id}
-                                className="border-b border-line/50 last:border-b-0"
-                              >
-                                <td className="px-4 py-2.5 text-sm font-semibold text-ink">
-                                  {assign.classes?.name ?? "—"}
-                                </td>
-                                <td className="px-4 py-2.5 text-xs text-slate">
-                                  {assign.classes?.level ?? "—"}
-                                </td>
-                                <td className="px-4 py-2.5 text-sm font-medium text-ink font-mono">
-                                  {assign.subjects?.name ?? "—"}
-                                </td>
+                      <div className="space-y-2">
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-left bg-white border border-line rounded">
+                            <thead className="bg-paper-dark border-b border-line text-[11px] font-semibold text-slate uppercase">
+                              <tr>
+                                <th className="px-3 py-2">Classe</th>
+                                <th className="px-3 py-2">Niveau</th>
+                                <th className="px-3 py-2">Matière</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-line">
+                              {teacher.assignments.map((assign) => (
+                                <tr key={assign.id}>
+                                  <td className="px-3 py-2 text-xs font-semibold text-ink">
+                                    {assign.classes?.name ?? "—"}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-slate">
+                                    {assign.classes?.level ?? "—"}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-medium font-mono text-ink">
+                                    {assign.subjects?.name ?? "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="md:hidden divide-y divide-line bg-white border border-line rounded overflow-hidden">
+                          {teacher.assignments.map((assign) => (
+                            <div key={assign.id} className="p-3 flex justify-between items-center text-xs">
+                              <div>
+                                <span className="font-bold text-ink">
+                                  {assign.classes?.name ?? "—"}
+                                </span>
+                                <span className="text-slate ml-1 font-mono">
+                                  ({assign.classes?.level ?? ""})
+                                </span>
+                              </div>
+                              <span className="font-semibold text-ink font-mono bg-paper-dark px-2 py-0.5 rounded">
+                                {assign.subjects?.name ?? "—"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -197,7 +233,7 @@ export const TeacherOverviewPage: React.FC<TeacherOverviewPageProps> = ({
           })}
         </div>
       )}
-    </PageContainer>
+    </div>
   );
 };
 

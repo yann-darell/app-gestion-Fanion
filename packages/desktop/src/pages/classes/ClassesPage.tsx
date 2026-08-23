@@ -1,14 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { 
-  listClasses, 
-  ClassRecord, 
-  supabase
+import {
+  listClasses,
+  ClassRecord,
+  supabase,
 } from "@fanion/shared";
-import PageContainer from "../../components/ui/PageContainer";
-import PageHeader from "../../components/ui/PageHeader";
-import { Button } from "../../components/ui/Button";
-import { Badge } from "../../components/ui/Badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../../components/ui/Table";
 import { ClassModal } from "./components/ClassModal";
 
 interface ClassesPageProps {
@@ -24,30 +19,28 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
 
-  const isWriteAuthorized = userRole === "principal" || userRole === "directeur_etudes";
+  const isWriteAuthorized =
+    userRole === "principal" || userRole === "directeur_etudes";
 
   const fetchClassesData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch classes list
       const data = await listClasses(filterDivision);
       setClasses(data);
 
-      // 2. Fetch school years to map IDs to labels
       const { data: syData, error: syErr } = await supabase
         .from("school_years")
         .select("id, label");
-        
       if (syErr) throw syErr;
-      
+
       const syMap: Record<string, string> = {};
-      syData?.forEach(sy => {
+      syData?.forEach((sy) => {
         syMap[sy.id] = sy.label;
       });
       setSchoolYears(syMap);
     } catch (err: any) {
-      console.error("Erreur de chargement des classes:", err);
+      console.error("Erreur de chargement des classes desktop:", err);
       setError("Impossible de charger la liste des classes.");
     } finally {
       setLoading(false);
@@ -68,128 +61,238 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
     setIsModalOpen(true);
   };
 
-  return (
-    <PageContainer>
-      <PageHeader
-        title="Gestion des Classes"
-        actions={
-          isWriteAuthorized && (
-            <Button onClick={handleCreateClick} className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
-              </svg>
-              Créer une classe
-            </Button>
-          )
-        }
-      />
+  const filters = [
+    { key: "all", label: "Toutes" },
+    { key: "college", label: "Collège" },
+    { key: "primaire", label: "Primaire" },
+  ] as const;
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 mb-6 p-2 bg-paper rounded border border-line">
-        <span className="text-xs font-semibold text-slate uppercase tracking-wider px-2">
+  return (
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="flex flex-col gap-4 pb-4 border-b border-line mb-6">
+        <div className="flex items-center justify-between min-h-[40px]">
+          <h1 className="font-display text-xl md:text-2xl font-semibold text-ink leading-tight">
+            Gestion des Classes
+          </h1>
+          {isWriteAuthorized && (
+            <button
+              onClick={handleCreateClick}
+              className="flex items-center gap-1.5 px-3 py-2 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span className="hidden sm:inline">Créer une classe</span>
+              <span className="sm:hidden">Créer</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-6 p-2 bg-paper-dark rounded border border-line overflow-x-auto">
+        <span className="text-[10px] font-semibold text-slate uppercase tracking-wider px-2 flex-shrink-0">
           Division :
         </span>
-        <button
-          onClick={() => setFilterDivision("all")}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 ${
-            filterDivision === "all"
-              ? "bg-[#150A5E] text-white"
-              : "text-slate hover:bg-paper-dark"
-          }`}
-        >
-          Toutes
-        </button>
-        <button
-          onClick={() => setFilterDivision("college")}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 ${
-            filterDivision === "college"
-              ? "bg-[#150A5E] text-white"
-              : "text-slate hover:bg-paper-dark"
-          }`}
-        >
-          Collège
-        </button>
-        <button
-          onClick={() => setFilterDivision("primaire")}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 ${
-            filterDivision === "primaire"
-              ? "bg-[#150A5E] text-white"
-              : "text-slate hover:bg-paper-dark"
-          }`}
-        >
-          Primaire
-        </button>
+        {filters.map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setFilterDivision(f.key)}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition duration-150 flex-shrink-0 ${
+              filterDivision === f.key
+                ? "bg-ink text-white"
+                : "text-slate hover:bg-paper"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
+        <div className="mb-6 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="py-12 text-center text-sm font-medium text-slate">
-          Chargement de la liste des classes...
+          Chargement…
         </div>
       ) : classes.length === 0 ? (
         <div className="py-12 border border-dashed border-line rounded bg-white text-center">
-          <p className="text-sm text-slate font-medium">Aucune classe trouvée</p>
+          <p className="text-sm text-slate font-medium">
+            Aucune classe trouvée
+          </p>
           {isWriteAuthorized && (
             <button
               onClick={handleCreateClick}
-              className="mt-3 text-xs font-semibold text-[#150A5E] hover:underline"
+              className="mt-3 text-xs font-semibold text-ink hover:underline"
             >
-              Créer la toute première classe maintenant
+              Créer la toute première classe
             </button>
           )}
         </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Niveau</TableHead>
-              <TableHead>Division</TableHead>
-              <TableHead>Année Scolaire</TableHead>
-              <TableHead>Professeur Principal</TableHead>
-              {isWriteAuthorized && <TableHead className="w-24 text-right">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {classes.map((cls) => (
-              <TableRow key={cls.id}>
-                <TableCell className="font-semibold text-ink">{cls.name}</TableCell>
-                <TableCell>{cls.level}</TableCell>
-                <TableCell>
-                  <Badge variant={cls.division_id === "college" ? "green" : "gray"}>
-                    {cls.division_id === "college" ? "Collège" : "Primaire"}
-                  </Badge>
-                </TableCell>
-                <TableCell fontMono>{schoolYears[cls.school_year_id] || cls.school_year_id}</TableCell>
-                <TableCell>
-                  {cls.head_teacher_name ? (
-                    <span className="text-ink font-medium">{cls.head_teacher_name}</span>
-                  ) : (
-                    <span className="text-slate italic text-xs">Non assigné</span>
+        <>
+          <div className="hidden md:block w-full overflow-x-auto border border-line rounded">
+            <table className="w-full border-collapse text-left">
+              <thead className="bg-paper-dark text-ink border-b border-line sticky top-0 z-10">
+                <tr>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Nom
+                  </th>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Niveau
+                  </th>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Division
+                  </th>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Année
+                  </th>
+                  <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5">
+                    Prof. Principal
+                  </th>
+                  {isWriteAuthorized && (
+                    <th className="font-sans font-semibold text-xs text-slate uppercase tracking-wider px-4 py-2.5 w-20 text-right">
+                      Actions
+                    </th>
                   )}
-                </TableCell>
-                {isWriteAuthorized && (
-                  <TableCell className="text-right">
-                    <button
-                      onClick={() => handleEditClick(cls)}
-                      className="p-1 text-slate hover:text-[#150A5E] hover:bg-paper rounded transition duration-150 inline-flex items-center justify-center"
-                      title="Modifier la classe"
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line bg-white">
+                {classes.map((cls) => (
+                  <tr
+                    key={cls.id}
+                    className="hover:bg-paper/50 transition-colors duration-100"
+                  >
+                    <td className="px-4 py-2.5 text-sm font-semibold text-ink">
+                      {cls.name}
+                    </td>
+                    <td className="px-4 py-2.5 text-sm text-ink">
+                      {cls.level}
+                    </td>
+                    <td className="px-4 py-2.5 text-sm">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          cls.division_id === "college"
+                            ? "bg-ink/10 text-ink"
+                            : "bg-fanion-green/10 text-fanion-green"
+                        }`}
+                      >
+                        {cls.division_id === "college"
+                          ? "Collège"
+                          : "Primaire"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-sm font-mono-data text-ink">
+                      {schoolYears[cls.school_year_id] || "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-sm text-ink">
+                      {cls.head_teacher_name || (
+                        <span className="text-slate italic text-xs">
+                          Non assigné
+                        </span>
+                      )}
+                    </td>
+                    {isWriteAuthorized && (
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          onClick={() => handleEditClick(cls)}
+                          className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
+                          title="Modifier"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                            />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden flex flex-col gap-3">
+            {classes.map((cls) => (
+              <div
+                key={cls.id}
+                className="bg-white border border-line rounded p-4 flex justify-between items-start gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-ink truncate">
+                      {cls.name}
+                    </p>
+                    <span
+                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0 ${
+                        cls.division_id === "college"
+                          ? "bg-ink/10 text-ink"
+                          : "bg-fanion-green/10 text-fanion-green"
+                      }`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                  </TableCell>
+                      {cls.division_id === "college"
+                        ? "Collège"
+                        : "Primaire"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate mt-1">
+                    Niveau : {cls.level} ·{" "}
+                    {schoolYears[cls.school_year_id] || "—"}
+                  </p>
+                  <p className="text-xs text-slate mt-0.5">
+                    Prof :{" "}
+                    {cls.head_teacher_name || (
+                      <span className="italic">Non assigné</span>
+                    )}
+                  </p>
+                </div>
+                {isWriteAuthorized && (
+                  <button
+                    onClick={() => handleEditClick(cls)}
+                    className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition flex-shrink-0"
+                    title="Modifier"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
+                  </button>
                 )}
-              </TableRow>
+              </div>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+        </>
       )}
 
       <ClassModal
@@ -198,7 +301,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
         onSave={fetchClassesData}
         editingClass={editingClass}
       />
-    </PageContainer>
+    </div>
   );
 };
 

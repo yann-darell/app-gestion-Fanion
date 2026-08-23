@@ -330,3 +330,35 @@ export async function deletePayment(paymentId: string): Promise<void> {
     throw new Error(`Erreur lors de la suppression du paiement: ${error.message}`);
   }
 }
+
+/**
+ * Compte le nombre total de paiements déjà enregistrés pour une classe donnée et une année scolaire donnée.
+ * Utilisé pour avertir l'utilisateur si un tarif est modifié alors que des paiements existent déjà.
+ */
+export async function getClassPaymentsCount(
+  classId: string,
+  schoolYearId: string
+): Promise<number> {
+  const { data: students, error: studErr } = await supabase
+    .from("students")
+    .select("id")
+    .eq("class_id", classId);
+
+  if (studErr || !students || students.length === 0) {
+    return 0;
+  }
+
+  const studentIds = students.map((s) => s.id);
+  const { count, error } = await supabase
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("school_year_id", schoolYearId)
+    .in("student_id", studentIds);
+
+  if (error) {
+    return 0;
+  }
+
+  return count || 0;
+}
+
