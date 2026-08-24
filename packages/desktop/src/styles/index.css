@@ -19,3 +19,44 @@ h3,
     font-family: "IBM Plex Mono", monospace;
     font-variant-numeric: tabular-nums;
 }
+
+/* Custom autohide scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.custom-scrollbar:hover,
+.custom-scrollbar:focus,
+.custom-scrollbar:active,
+.custom-scrollbar.is-scrolling {
+  scrollbar-color: rgba(250, 249, 245, 0.25) transparent;
+}
+
+/* Webkit scrollbar styles (Chrome, Safari, Edge, Electron) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.3s ease;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb,
+.custom-scrollbar:focus::-webkit-scrollbar-thumb,
+.custom-scrollbar:active::-webkit-scrollbar-thumb,
+.custom-scrollbar.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(250, 249, 245, 0.25);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(250, 249, 245, 0.45);
+}

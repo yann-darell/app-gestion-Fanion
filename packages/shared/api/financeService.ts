@@ -35,6 +35,7 @@ export interface Payment {
   method: "cash" | "bank_transfer" | "mobile_money" | "check";
   receipt_number: number;
   tranche_ciblee: string | null;
+  payment_category: "registration" | "tuition";
   created_at: string;
 }
 
@@ -274,37 +275,155 @@ export async function createPayment(params: {
   amount: number;
   paymentDate?: string;
   method: "cash" | "bank_transfer" | "mobile_money" | "check";
+  paymentCategory?: "registration" | "tuition";
 }): Promise<{ payment: Payment; allocation: AllocationResult }> {
+  const category = params.paymentCategory || "tuition";
+
   // 1. Charger le tarif de la classe
   const feeSchedule = await getFeeSchedule(params.classId, params.schoolYearId);
   if (!feeSchedule) {
     throw new Error("Aucun tarif configuré pour cette classe et cette année scolaire.");
   }
 
-  // 2. Charger les éventuels paiements antérieurs
+  // 2. Charger les paiements antérieurs de l'élève
   const existingPayments = await getStudentPayments(params.studentId, params.schoolYearId);
-  const previousSum = existingPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const previousRegistrationSum = existingPayments
+    .filter((p) => (p.payment_category || "tuition") === "registration")
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+
+  const previousTuitionSum = existingPayments
+    .filter((p) => (p.payment_category || "tuition") === "tuition")
+    .reduce((sum, p) => sum + Number(p.amount), 0);
 
   // 3. Charger l'éventuel override de scolarité
   const feeOverride = await getStudentFeeOverride(params.studentId, params.schoolYearId);
   const totalOverride = feeOverride ? feeOverride.total_amount_override : undefined;
 
-  // 4. Calculer l'allocation centralisée
+  const totalRegistrationFee = Number(feeSchedule.registration_fee || 0);
+  const remainingRegistrationFee = Math.max(0, totalRegistrationFee - previousRegistrationSum);
+
+  const formatAmount = (amt: number) =>
+    Math.round(amt).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+  // 4. Cas : Paiement sous la catégorie "registration" avec un montant dépassant le solde restant d'inscription
+  if (category === "registration") {
+    if (remainingRegistrationFee > 0 && params.amount > remainingRegistrationFee) {
+      const regPart = remainingRegistrationFee;
+      const tuitionPart = params.amount - remainingRegistrationFee;
+
+      // Étape 1 : Créer le paiement d'inscription pour solder l'inscription
+      const { data: regData, error: regError } = await supabase.rpc(
+        "create_payment_with_receipt",
+        {
+          p_student_id: params.studentId,
+          p_school_year_id: params.schoolYearId,
+          p_amount: regPart,
+          p_payment_date: params.paymentDate || new Date().toISOString().split("T")[0],
+          p_method: params.method,
+          p_tranche_ciblee: "Frais d'inscription",
+          p_payment_category: "registration",
+        }
+      );
+
+      if (regError) {
+        throw new Error(`Erreur lors du règlement de l'inscription: ${regError.message}`);
+      }
+
+      const regPayment = Array.isArray(regData) ? regData[0] : regData;
+
+      // Étape 2 : Créer le paiement de scolarité pour le surplus
+      const allocation = allocatePaymentToInstallments(
+        feeSchedule.installments_json,
+        previousTuitionSum,
+        tuitionPart,
+        totalOverride
+      );
+
+      const { data: tuitionData, error: tuitionError } = await supabase.rpc(
+        "create_payment_with_receipt",
+        {
+          p_student_id: params.studentId,
+          p_school_year_id: params.schoolYearId,
+          p_amount: tuitionPart,
+          p_payment_date: params.paymentDate || new Date().toISOString().split("T")[0],
+          p_method: params.method,
+          p_tranche_ciblee: allocation.trancheCibleeSummary,
+          p_payment_category: "tuition",
+        }
+      );
+
+      if (tuitionError) {
+        throw new Error(`Erreur lors du règlement de la scolarité (surplus): ${tuitionError.message}`);
+      }
+
+      const tuitionPayment = Array.isArray(tuitionData) ? tuitionData[0] : tuitionData;
+
+      // Synthèse combinée pour l'affichage de la confirmation / reçu
+      const combinedPayment: Payment = {
+        ...tuitionPayment,
+        amount: params.amount,
+        receipt_number: regPayment.receipt_number === tuitionPayment.receipt_number 
+          ? regPayment.receipt_number 
+          : `${regPayment.receipt_number} & ${tuitionPayment.receipt_number}` as any,
+        tranche_ciblee: `Inscription (${formatAmount(regPart)} FCFA) + Scolarité (${allocation.trancheCibleeSummary})`,
+      };
+
+      return {
+        payment: combinedPayment,
+        allocation,
+      };
+    } else if (remainingRegistrationFee === 0) {
+      // Si l'inscription est déjà intégralement soldée, basculer tout le montant en scolarité
+      const allocation = allocatePaymentToInstallments(
+        feeSchedule.installments_json,
+        previousTuitionSum,
+        params.amount,
+        totalOverride
+      );
+
+      const { data, error } = await supabase.rpc("create_payment_with_receipt", {
+        p_student_id: params.studentId,
+        p_school_year_id: params.schoolYearId,
+        p_amount: params.amount,
+        p_payment_date: params.paymentDate || new Date().toISOString().split("T")[0],
+        p_method: params.method,
+        p_tranche_ciblee: allocation.trancheCibleeSummary,
+        p_payment_category: "tuition",
+      });
+
+      if (error) {
+        throw new Error(`Erreur lors de l'enregistrement du paiement: ${error.message}`);
+      }
+
+      const createdPayment = Array.isArray(data) ? data[0] : data;
+
+      return {
+        payment: createdPayment,
+        allocation,
+      };
+    }
+  }
+
+  // 5. Cas standard (Montant <= solde restant d'inscription OU catégorie "tuition")
   const allocation = allocatePaymentToInstallments(
     feeSchedule.installments_json,
-    previousSum,
-    params.amount,
+    previousTuitionSum,
+    category === "registration" ? 0 : params.amount,
     totalOverride
   );
 
-  // 5. Exécuter la RPC transactionnelle backend create_payment_with_receipt
+  const trancheSummary =
+    category === "registration" ? "Frais d'inscription" : allocation.trancheCibleeSummary;
+
   const { data, error } = await supabase.rpc("create_payment_with_receipt", {
     p_student_id: params.studentId,
     p_school_year_id: params.schoolYearId,
     p_amount: params.amount,
     p_payment_date: params.paymentDate || new Date().toISOString().split("T")[0],
     p_method: params.method,
-    p_tranche_ciblee: allocation.trancheCibleeSummary,
+    p_tranche_ciblee: trancheSummary,
+    p_payment_category: category,
   });
 
   if (error) {
@@ -320,11 +439,13 @@ export async function createPayment(params: {
 }
 
 /**
- * Supprime un paiement par son ID.
+ * Supprime un paiement par son ID via la RPC transactionnelle backend.
  * NOTE : La suppression d'un paiement ne décrémente JAMAIS receipt_counters.
  */
 export async function deletePayment(paymentId: string): Promise<void> {
-  const { error } = await supabase.from("payments").delete().eq("id", paymentId);
+  const { error } = await supabase.rpc("delete_payment_with_status_check", {
+    p_payment_id: paymentId,
+  });
 
   if (error) {
     throw new Error(`Erreur lors de la suppression du paiement: ${error.message}`);

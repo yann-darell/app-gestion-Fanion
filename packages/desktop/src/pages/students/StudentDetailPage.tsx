@@ -105,12 +105,20 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
           <h1 className="text-2xl font-bold font-display text-ink">Fiche élève</h1>
         </div>
         {isWriteAuthorized && (
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="px-4 py-2 bg-ink text-white rounded text-sm font-semibold hover:bg-opacity-90 transition self-start sm:self-auto"
-          >
-            Modifier
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
+              className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded text-sm font-semibold transition shadow-sm"
+            >
+              💳 Enregistrer un paiement
+            </button>
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-4 py-2 bg-ink text-white rounded text-sm font-semibold hover:bg-opacity-90 transition"
+            >
+              Modifier
+            </button>
+          </div>
         )}
       </div>
 
@@ -138,15 +146,19 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <span
-              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                student.status === "active"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-rose-100 text-rose-800"
-              }`}
-            >
-              {student.status === "active" ? "Actif" : "Inactif"}
-            </span>
+            {student.status === "active" ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Actif / Inscrit
+              </span>
+            ) : student.status === "pending_registration" ? (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                En attente d'inscription
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate/10 text-slate border border-slate/20">
+                Inactif
+              </span>
+            )}
             {student.is_repeating && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                 Redoublant
@@ -175,7 +187,16 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
             <InfoField label="Matricule" value={student.matricule || "—"} mono />
             <InfoField label="Classe" value={classNameMap[student.class_id] || "Non affecté"} />
             <InfoField label="Statut redoublant" value={student.is_repeating ? "Oui" : "Non"} />
-            <InfoField label="Statut" value={student.status === "active" ? "Actif" : "Inactif"} />
+            <InfoField
+              label="Statut"
+              value={
+                student.status === "active"
+                  ? "Actif / Inscrit"
+                  : student.status === "pending_registration"
+                  ? "En attente d'inscription"
+                  : "Inactif"
+              }
+            />
           </div>
 
           <h3 className="font-display text-lg font-bold text-ink mt-8 mb-4 border-b border-line pb-2">

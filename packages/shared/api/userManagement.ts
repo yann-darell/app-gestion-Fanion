@@ -56,7 +56,7 @@ export async function listUsers(roleFilter?: string): Promise<UserProfile[]> {
         .select("id, full_name, email, role, division_scope, created_at")
         .order("created_at", { ascending: false });
 
-    if (roleFilter) {
+    if (roleFilter && roleFilter !== "all") {
         query = query.eq("role", roleFilter);
     }
 
@@ -64,3 +64,49 @@ export async function listUsers(roleFilter?: string): Promise<UserProfile[]> {
     if (error) throw error;
     return (data as UserProfile[]) ?? [];
 }
+
+/**
+ * Met à jour un profil utilisateur existant.
+ */
+export async function updateUser(
+    id: string,
+    updates: {
+        full_name?: string;
+        email?: string;
+        role?: string;
+        division_scope?: string | null;
+    }
+): Promise<UserProfile> {
+    const { data, error } = await supabase
+        .from("profiles")
+        .update({
+            ...(updates.full_name !== undefined && { full_name: updates.full_name.trim() }),
+            ...(updates.email !== undefined && { email: updates.email.trim() }),
+            ...(updates.role !== undefined && { role: updates.role }),
+            ...(updates.division_scope !== undefined && { division_scope: updates.division_scope }),
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+    if (error) {
+        throw new Error(error.message || "Impossible de mettre à jour l'utilisateur.");
+    }
+
+    return data as UserProfile;
+}
+
+/**
+ * Supprime un profil utilisateur.
+ */
+export async function deleteUser(id: string): Promise<void> {
+    const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", id);
+
+    if (error) {
+        throw new Error(error.message || "Échec de la suppression du compte utilisateur.");
+    }
+}
+

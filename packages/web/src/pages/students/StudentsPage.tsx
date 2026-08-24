@@ -220,6 +220,7 @@ function StudentRowDesktop({
   onDelete: (s: StudentRecord) => void;
   onViewDetails: (s: StudentRecord) => void;
 }) {
+  const navigate = useNavigate();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -264,15 +265,19 @@ function StudentRowDesktop({
         {student.gender === "M" ? "M" : "F"}
       </td>
       <td className="py-3 px-4">
-        <span
-          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-            student.status === "active"
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-rose-100 text-rose-800"
-          }`}
-        >
-          {student.status === "active" ? "Inscrit" : "Inactif"}
-        </span>
+        {student.status === "active" ? (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            Actif / Inscrit
+          </span>
+        ) : student.status === "pending_registration" ? (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+            En attente
+          </span>
+        ) : (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate/10 text-slate border border-slate/20">
+            Inactif
+          </span>
+        )}
       </td>
       <td className="py-3 px-4 text-right">
         <div className="flex items-center justify-end gap-2 text-xs">
@@ -284,6 +289,12 @@ function StudentRowDesktop({
           </button>
           {isWriteAuthorized && (
             <>
+              <button
+                onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
+                className="text-amber-800 font-semibold hover:underline"
+              >
+                Payer
+              </button>
               <button
                 onClick={() => onEdit(student)}
                 className="text-ink font-medium hover:underline"
@@ -321,6 +332,7 @@ function StudentCardMobile({
   onDelete: (s: StudentRecord) => void;
   onViewDetails: (s: StudentRecord) => void;
 }) {
+  const navigate = useNavigate();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -353,15 +365,19 @@ function StudentCardMobile({
           </h3>
           <p className="text-xs font-mono text-slate">{student.matricule}</p>
         </div>
-        <span
-          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-            student.status === "active"
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-rose-100 text-rose-800"
-          }`}
-        >
-          {student.status === "active" ? "Inscrit" : "Inactif"}
-        </span>
+        {student.status === "active" ? (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            Actif / Inscrit
+          </span>
+        ) : student.status === "pending_registration" ? (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+            En attente
+          </span>
+        ) : (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate/10 text-slate border border-slate/20">
+            Inactif
+          </span>
+        )}
       </div>
 
       <div className="text-xs text-slate border-t border-b border-line py-2 flex flex-col gap-1">
@@ -384,6 +400,12 @@ function StudentCardMobile({
         </button>
         {isWriteAuthorized && (
           <>
+            <button
+              onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
+              className="text-amber-800 font-semibold hover:underline"
+            >
+              Payer
+            </button>
             <button
               onClick={() => onEdit(student)}
               className="text-ink font-medium hover:underline"

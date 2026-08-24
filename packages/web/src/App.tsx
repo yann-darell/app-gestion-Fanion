@@ -16,6 +16,7 @@ import TeacherEvolutionPage from "./pages/teacher/TeacherEvolutionPage";
 import ClassReportPage from "./pages/reports/ClassReportPage";
 import BulletinsPdfPage from "./pages/reports/BulletinsPdfPage";
 import FeeSchedulePage from "./pages/finance/FeeSchedulePage";
+import PaymentEntryPage from "./pages/finance/PaymentEntryPage";
 
 type Profile = {
   id: string;
@@ -382,6 +383,30 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════════════════
   const MainLayout = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const mainRef = React.useRef<HTMLElement>(null);
+    const mainScrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const handleMainScroll = () => {
+      if (mainRef.current) {
+        mainRef.current.classList.add("is-scrolling");
+        if (mainScrollTimeoutRef.current) {
+          clearTimeout(mainScrollTimeoutRef.current);
+        }
+        mainScrollTimeoutRef.current = setTimeout(() => {
+          if (mainRef.current) {
+            mainRef.current.classList.remove("is-scrolling");
+          }
+        }, 1000);
+      }
+    };
+
+    useEffect(() => {
+      return () => {
+        if (mainScrollTimeoutRef.current) {
+          clearTimeout(mainScrollTimeoutRef.current);
+        }
+      };
+    }, []);
 
     return (
       <div className="flex h-screen w-screen overflow-hidden bg-paper text-ink">
@@ -397,7 +422,11 @@ export default function App() {
             onLogout={handleLogout}
             onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
           />
-          <main className="flex-1 overflow-y-auto">
+          <main 
+            ref={mainRef}
+            onScroll={handleMainScroll}
+            className="flex-1 overflow-y-auto custom-scrollbar"
+          >
             {loadingProfile ? (
               <div className="py-12 text-center text-slate font-medium text-sm">Chargement du profil…</div>
             ) : (
@@ -408,6 +437,7 @@ export default function App() {
       </div>
     );
   };
+
 
   return (
     <BrowserRouter>
@@ -428,6 +458,7 @@ export default function App() {
             <Route path="bulletins" element={<BulletinsPdfPage userRole={profile?.role} />} />
             
             <Route path="finance/fee-schedule" element={<FeeSchedulePage userRole={profile?.role} />} />
+            <Route path="finance/payments" element={<PaymentEntryPage userRole={profile?.role} />} />
             <Route path="users" element={<UserAccountsPage userRole={profile?.role} />} />
 
             {/* ── Routes Enseignant D3 ── */}

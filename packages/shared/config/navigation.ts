@@ -88,9 +88,9 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
-    id: "finance",
-    to: "/finance",
-    label: "Finance & Scolarité",
+    id: "finance-payments",
+    to: "/finance/payments",
+    label: "Enregistrer Paiement",
     category: "Finance & Administration",
     allowedRoles: ["principal", "directeur_etudes"],
   },

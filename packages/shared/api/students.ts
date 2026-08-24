@@ -239,7 +239,7 @@ export async function createStudent(
         class_id: input.class_id,
         guardian_name: input.guardian_name.trim(),
         guardian_phone: input.guardian_phone.trim(),
-        status: input.status || "active",
+        status: input.status || "pending_registration",
         photo_path: uploadedPhotoPath,
       })
       .select()
