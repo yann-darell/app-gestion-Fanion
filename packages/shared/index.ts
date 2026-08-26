@@ -9,6 +9,7 @@ export * from "./api/userManagement";
 export * from "./api/gradeCalculations";
 export * from "./api/grades";
 export * from "./api/bulletinPdfService";
+export * from "./api/receiptPdfService";
 export * from "./api/financeService";
 export * from "./services/classReportService";
 export * from "./config/navigation";

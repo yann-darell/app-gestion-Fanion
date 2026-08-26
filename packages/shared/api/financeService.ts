@@ -34,6 +34,7 @@ export interface Payment {
   payment_date: string;
   method: "cash" | "bank_transfer" | "mobile_money" | "check";
   receipt_number: number;
+  student_receipt_seq?: number;
   tranche_ciblee: string | null;
   payment_category: "registration" | "tuition";
   created_at: string;
@@ -264,9 +265,39 @@ export async function getStudentPayments(
   return data || [];
 }
 
+import { generateAndSaveReceipt, getReceiptForPayment } from "./receiptPdfService";
+
+export interface PaymentWithReceipt extends Payment {
+  receipt_pdf_path?: string;
+}
+
 /**
- * Enregistre un nouveau paiement en calculant automatiquement la répartition par tranche
- * et en exécutant la RPC transactionnelle create_payment_with_receipt.
+ * Récupère l'historique des paiements d'un élève pour une année scolaire avec le chemin PDF du reçu.
+ */
+export async function getStudentPaymentsWithReceipts(
+  studentId: string,
+  schoolYearId: string
+): Promise<PaymentWithReceipt[]> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*, receipts(pdf_path)")
+    .eq("student_id", studentId)
+    .eq("school_year_id", schoolYearId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Erreur lors de la récupération des paiements de l'élève: ${error.message}`);
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    receipt_pdf_path: item.receipts?.[0]?.pdf_path || item.receipts?.pdf_path || undefined,
+  }));
+}
+
+/**
+ * Enregistre un nouveau paiement en calculant automatiquement la répartition par tranche,
+ * en exécutant la RPC transactionnelle create_payment_with_receipt et en générant le reçu PDF.
  */
 export async function createPayment(params: {
   studentId: string;
@@ -276,7 +307,7 @@ export async function createPayment(params: {
   paymentDate?: string;
   method: "cash" | "bank_transfer" | "mobile_money" | "check";
   paymentCategory?: "registration" | "tuition";
-}): Promise<{ payment: Payment; allocation: AllocationResult }> {
+}): Promise<{ payment: Payment; allocation: AllocationResult; receiptPdfPath?: string; secondaryReceiptPdfPath?: string }> {
   const category = params.paymentCategory || "tuition";
 
   // 1. Charger le tarif de la classe
@@ -306,7 +337,7 @@ export async function createPayment(params: {
   const formatAmount = (amt: number) =>
     Math.round(amt).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
-  // 4. Cas : Paiement sous la catégorie "registration" avec un montant dépassant le solde restant d'inscription
+  // 4. Cas : Paiement sous la catégorie "registration" avec un montant dépassant le solde restant d'inscription (Option A : 2 reçus séparés)
   if (category === "registration") {
     if (remainingRegistrationFee > 0 && params.amount > remainingRegistrationFee) {
       const regPart = remainingRegistrationFee;
@@ -331,6 +362,7 @@ export async function createPayment(params: {
       }
 
       const regPayment = Array.isArray(regData) ? regData[0] : regData;
+      const regReceipt = await generateAndSaveReceipt({ payment: regPayment });
 
       // Étape 2 : Créer le paiement de scolarité pour le surplus
       const allocation = allocatePaymentToInstallments(
@@ -358,20 +390,21 @@ export async function createPayment(params: {
       }
 
       const tuitionPayment = Array.isArray(tuitionData) ? tuitionData[0] : tuitionData;
+      const tuitionReceipt = await generateAndSaveReceipt({ payment: tuitionPayment, allocation });
 
-      // Synthèse combinée pour l'affichage de la confirmation / reçu
+      // Synthèse combinée pour l'affichage de la confirmation
       const combinedPayment: Payment = {
         ...tuitionPayment,
         amount: params.amount,
-        receipt_number: regPayment.receipt_number === tuitionPayment.receipt_number 
-          ? regPayment.receipt_number 
-          : `${regPayment.receipt_number} & ${tuitionPayment.receipt_number}` as any,
+        receipt_number: `${regPayment.receipt_number} & ${tuitionPayment.receipt_number}` as any,
         tranche_ciblee: `Inscription (${formatAmount(regPart)} FCFA) + Scolarité (${allocation.trancheCibleeSummary})`,
       };
 
       return {
         payment: combinedPayment,
         allocation,
+        receiptPdfPath: regReceipt.pdfPath,
+        secondaryReceiptPdfPath: tuitionReceipt.pdfPath,
       };
     } else if (remainingRegistrationFee === 0) {
       // Si l'inscription est déjà intégralement soldée, basculer tout le montant en scolarité
@@ -397,10 +430,12 @@ export async function createPayment(params: {
       }
 
       const createdPayment = Array.isArray(data) ? data[0] : data;
+      const receiptRes = await generateAndSaveReceipt({ payment: createdPayment, allocation });
 
       return {
         payment: createdPayment,
         allocation,
+        receiptPdfPath: receiptRes.pdfPath,
       };
     }
   }
@@ -431,24 +466,47 @@ export async function createPayment(params: {
   }
 
   const createdPayment = Array.isArray(data) ? data[0] : data;
+  const receiptRes = await generateAndSaveReceipt({
+    payment: createdPayment,
+    allocation: category === "tuition" ? allocation : undefined,
+  });
 
   return {
     payment: createdPayment,
     allocation,
+    receiptPdfPath: receiptRes.pdfPath,
   };
 }
 
 /**
- * Supprime un paiement par son ID via la RPC transactionnelle backend.
- * NOTE : La suppression d'un paiement ne décrémente JAMAIS receipt_counters.
+ * Supprime un paiement par son ID via la RPC transactionnelle backend,
+ * et supprime son fichier Storage associé pour éviter les orphelins.
  */
 export async function deletePayment(paymentId: string): Promise<void> {
+  // 1. Récupérer d'abord le reçu associé (avant que la RPC ne supprime la ligne en DB)
+  const receipt = await getReceiptForPayment(paymentId);
+  const pdfPath = receipt?.pdf_path;
+
+  // 2. Supprimer la ligne en base via la RPC
   const { error } = await supabase.rpc("delete_payment_with_status_check", {
     p_payment_id: paymentId,
   });
 
   if (error) {
     throw new Error(`Erreur lors de la suppression du paiement: ${error.message}`);
+  }
+
+  // 3. Supprimer le fichier Storage de façon explicite
+  if (pdfPath) {
+    const { data: remData, error: storageErr } = await supabase.storage
+      .from("receipts")
+      .remove([pdfPath]);
+
+    if (storageErr) {
+      console.warn("Avertissement: Échec de suppression du fichier PDF du reçu dans Storage:", storageErr);
+    } else {
+      console.log(`[deletePayment] Fichier Storage supprimé avec succès: ${pdfPath}`);
+    }
   }
 }
 

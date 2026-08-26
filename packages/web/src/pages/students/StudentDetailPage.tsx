@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
+  supabase,
   getStudent,
   listClasses,
   getStudentPhotoUrl,
+  getStudentPaymentsWithReceipts,
+  getReceiptSignedUrl,
   StudentRecord,
   ClassRecord,
 } from "@fanion/shared";
@@ -27,8 +30,20 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  const [effectiveRole, setEffectiveRole] = useState<string | undefined>(userRole);
+
+  useEffect(() => {
+    if (userRole) {
+      setEffectiveRole(userRole);
+    } else {
+      supabase.from("profiles").select("role").eq("id", (supabase.auth.getUser() as any)?.data?.user?.id).single().then(({ data }) => {
+        if (data?.role) setEffectiveRole(data.role);
+      });
+    }
+  }, [userRole]);
+
   const isWriteAuthorized =
-    userRole === "principal" || userRole === "directeur_etudes";
+    effectiveRole === "principal" || effectiveRole === "directeur_etudes";
 
   const loadStudentData = useCallback(async () => {
     if (!id) return;
@@ -198,6 +213,11 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
             <InfoField label="Nom du tuteur" value={student.guardian_name} />
             <InfoField label="Téléphone" value={student.guardian_phone} mono />
           </div>
+
+          {/* Section Historique des paiements & Reçus (Réservée exclusivement au Principal et Directeur des Études - SECURITE.md §3.2) */}
+          {isWriteAuthorized && (
+            <StudentPaymentsHistorySection studentId={student.id} studentName={`${student.last_name} ${student.first_name}`} />
+          )}
         </div>
       </div>
 
@@ -229,6 +249,171 @@ function InfoField({
       <span className={`text-sm text-ink ${mono ? "font-mono" : "font-sans"}`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function StudentPaymentsHistorySection({
+  studentId,
+  studentName,
+}: {
+  studentId: string;
+  studentName: string;
+}) {
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadPayments() {
+      try {
+        setLoading(true);
+        const data = await getStudentPaymentsWithReceipts(studentId);
+        setPayments(data || []);
+      } catch (e) {
+        console.error("Erreur chargement paiements élève:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadPayments();
+  }, [studentId]);
+
+  const formatAmount = (amt: number) =>
+    Math.round(amt || 0)
+      .toString()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+  if (loading) {
+    return (
+      <div className="mt-8 pt-4 border-t border-line text-xs text-slate italic">
+        Chargement de l'historique des paiements…
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 pt-4 border-t border-line space-y-3">
+      <h3 className="font-display text-lg font-bold text-ink border-b border-line pb-2 flex items-center justify-between">
+        <span>Historique des paiements & Reçus</span>
+        <span className="text-xs font-normal text-slate font-sans">
+          {payments.length} versement(s)
+        </span>
+      </h3>
+
+      {payments.length === 0 ? (
+        <p className="text-xs text-slate italic py-2">
+          Aucun paiement enregistré pour cet élève.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {payments.map((item) => {
+            const p = item.payment;
+            const pdfPath = item.pdfPath;
+            return (
+              <div
+                key={p.id}
+                className="p-3 border border-line rounded bg-paper text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div className="space-y-0.5">
+                  <div className="font-bold text-ink flex items-center gap-2">
+                    <span>Reçu N° {p.student_receipt_seq || p.receipt_number}</span>
+                    <span className="text-[10px] text-slate font-mono font-normal">
+                      (Réf global : N° {p.receipt_number})
+                    </span>
+                    <span className="text-emerald-800 font-bold ml-1">
+                      {formatAmount(Number(p.amount))} FCFA
+                    </span>
+                  </div>
+                  <div className="text-slate text-[11px]">
+                    Date : {p.payment_date} • Mode : <strong className="uppercase">{p.method}</strong> • Catégorie :{" "}
+                    <strong>{p.payment_category === "registration" ? "Inscription" : "Scolarité"}</strong>
+                  </div>
+                  {p.tranche_ciblee && (
+                    <div className="text-slate/80 text-[10px] italic">
+                      {p.tranche_ciblee}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (pdfPath) {
+                          const url = await getReceiptSignedUrl(pdfPath);
+                          setPreviewPdfUrl(url);
+                        } else {
+                          alert("Aucun reçu PDF associé à ce paiement.");
+                        }
+                      } catch (err: any) {
+                        alert("Erreur lors de la récupération du reçu: " + err?.message);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-white border border-line hover:bg-paper text-ink font-bold rounded text-[11px] transition flex items-center gap-1"
+                  >
+                    <span>👁️</span> Voir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        if (pdfPath) {
+                          const url = await getReceiptSignedUrl(pdfPath);
+                          const response = await fetch(url);
+                          const blob = await response.blob();
+                          const downloadUrl = window.URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.href = downloadUrl;
+                          link.download = `Recu_${studentName.replace(/\s+/g, "_")}_N${p.student_receipt_seq || p.receipt_number}.pdf`;
+                          document.body.appendChild(link);
+                          link.click();
+                          link.remove();
+                          window.URL.revokeObjectURL(downloadUrl);
+                        } else {
+                          alert("Aucun reçu PDF disponible au téléchargement.");
+                        }
+                      } catch (err: any) {
+                        alert("Erreur lors du téléchargement: " + err?.message);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded text-[11px] transition flex items-center gap-1"
+                  >
+                    <span>📥</span> Télécharger
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modale de prévisualisation PDF Iframe */}
+      {previewPdfUrl && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-line">
+            <div className="p-4 bg-ink text-white flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm flex items-center gap-2">
+                <span>📄</span> Aperçu du Reçu Officiel
+              </h3>
+              <button
+                onClick={() => setPreviewPdfUrl(null)}
+                className="w-8 h-8 rounded hover:bg-white/20 flex items-center justify-center text-lg font-bold transition"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 bg-slate/10 p-2">
+              <iframe
+                src={previewPdfUrl}
+                className="w-full h-full rounded border-0"
+                title="Aperçu Reçu PDF"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

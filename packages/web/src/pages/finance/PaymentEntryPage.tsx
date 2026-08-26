@@ -17,6 +17,8 @@ import {
   StudentFeeOverride,
   Payment,
   AllocationResult,
+  getReceiptForPayment,
+  getReceiptSignedUrl,
   useSelectionPersistence,
 } from "@fanion/shared";
 
@@ -64,6 +66,9 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
   const [loadingStudent, setLoadingStudent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal Aperçu PDF Reçu
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
   // Confirmation Modal State
   const [createdPaymentResult, setCreatedPaymentResult] = useState<{
@@ -724,6 +729,57 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
               </div>
             </div>
 
+            {/* Boutons d'action pour le Reçu PDF */}
+            <div className="p-3 bg-paper-dark/50 border border-line rounded flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const receipt = await getReceiptForPayment(createdPaymentResult.payment.id);
+                    if (receipt?.pdf_path) {
+                      const url = await getReceiptSignedUrl(receipt.pdf_path);
+                      setPreviewPdfUrl(url);
+                    } else {
+                      alert("Reçu PDF non disponible.");
+                    }
+                  } catch (err: any) {
+                    alert("Erreur lors de la récupération du reçu PDF: " + err?.message);
+                  }
+                }}
+                className="flex-1 py-2 px-3 bg-white border border-line text-ink font-bold rounded text-xs hover:bg-paper transition flex items-center justify-center gap-1.5"
+              >
+                <span>👁️</span> Voir le reçu
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const receipt = await getReceiptForPayment(createdPaymentResult.payment.id);
+                    if (receipt?.pdf_path) {
+                      const url = await getReceiptSignedUrl(receipt.pdf_path);
+                      const response = await fetch(url);
+                      const blob = await response.blob();
+                      const downloadUrl = window.URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = downloadUrl;
+                      link.download = `Recu_${selectedStudent?.last_name || "Eleve"}_N${createdPaymentResult.payment.student_receipt_seq || createdPaymentResult.payment.receipt_number}.pdf`;
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      window.URL.revokeObjectURL(downloadUrl);
+                    } else {
+                      alert("Reçu PDF non disponible.");
+                    }
+                  } catch (err: any) {
+                    alert("Erreur lors du téléchargement du reçu PDF: " + err?.message);
+                  }
+                }}
+                className="flex-1 py-2 px-3 bg-emerald-700 text-white font-bold rounded text-xs hover:bg-emerald-800 transition flex items-center justify-center gap-1.5"
+              >
+                <span>📥</span> Télécharger
+              </button>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 onClick={() => setCreatedPaymentResult(null)}
@@ -740,6 +796,31 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
               >
                 Voir fiche élève
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modale de prévisualisation PDF Iframe */}
+      {previewPdfUrl && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-line">
+            <div className="p-4 bg-ink text-white flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm flex items-center gap-2">
+                <span>📄</span> Prévisualisation du Reçu Officiel
+              </h3>
+              <button
+                onClick={() => setPreviewPdfUrl(null)}
+                className="w-8 h-8 rounded hover:bg-white/20 flex items-center justify-center text-lg font-bold transition"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 bg-slate/10 p-2">
+              <iframe
+                src={previewPdfUrl}
+                className="w-full h-full rounded border-0"
+                title="Aperçu Reçu PDF"
+              />
             </div>
           </div>
         </div>
