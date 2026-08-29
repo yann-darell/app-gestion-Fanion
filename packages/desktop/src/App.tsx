@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { HashRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { supabase, isRouteAllowedForRole } from "@fanion/shared";
+import logoFanion from "./assets/logo_fanion.webp";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import ClassesPage from "./pages/classes/ClassesPage";
@@ -62,7 +63,7 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
       <header className="border-b border-[#E4E0D6] bg-white py-3 px-6 shadow-sm flex-shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo_fanion.webp" alt="Logo Le Fanion" className="w-10 h-10 object-contain" />
+            <img src={logoFanion} alt="Logo Le Fanion" className="w-10 h-10 object-contain" />
             <h1 className="text-xl font-display font-bold tracking-tight">Le Fanion</h1>
           </div>
           <span className="text-xs px-2.5 py-1 rounded bg-[#150A5E] text-white font-semibold tracking-wider uppercase">Portail Bureau</span>
@@ -72,7 +73,7 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
       <main className="flex-grow flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white border border-[#E4E0D6] rounded p-8 shadow-sm">
           <div className="text-center mb-6 flex flex-col items-center">
-            <img src="/logo_fanion.webp" alt="Blason Collège Le Fanion" className="w-20 h-20 object-contain mb-3 drop-shadow-sm" />
+            <img src={logoFanion} alt="Blason Collège Le Fanion" className="w-20 h-20 object-contain mb-3 drop-shadow-sm" />
             <h2 className="text-2xl font-display font-bold mb-1">Définir votre mot de passe</h2>
             <p className="text-sm text-slate max-w-xs leading-relaxed">
               Bienvenue sur la plateforme Le Fanion. Veuillez choisir un mot de passe sécurisé pour accéder à votre espace.
@@ -285,7 +286,7 @@ export default function App() {
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
-                src="/logo_fanion.webp"
+                src={logoFanion}
                 alt="Logo Le Fanion"
                 className="w-10 h-10 object-contain"
               />
@@ -302,7 +303,7 @@ export default function App() {
           <div className="w-full max-w-md bg-white border border-[#E4E0D6] rounded p-8 shadow-sm">
             <div className="text-center mb-6 flex flex-col items-center">
               <img
-                src="/logo_fanion.webp"
+                src={logoFanion}
                 alt="Blason Collège Le Fanion"
                 className="w-20 h-20 object-contain mb-3 drop-shadow-sm"
               />

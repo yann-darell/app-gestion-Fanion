@@ -41,18 +41,27 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
     category: "Structure & Pédagogie",
     allowedRoles: ["principal", "directeur_etudes"],
   },
+
+  // --- Administration & Comptes ---
   {
     id: "assignments",
     to: "/assignments",
     label: "Attributions",
-    category: "Structure & Pédagogie",
+    category: "Administration & Enseignants",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+  {
+    id: "users",
+    to: "/users",
+    label: "Gestion des comptes",
+    category: "Administration & Enseignants",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "assignments-overview",
     to: "/assignments/overview",
-    label: "Vue d'ensemble",
-    category: "Structure & Pédagogie",
+    label: "Vue d'ensemble attributions",
+    category: "Administration & Enseignants",
     allowedRoles: ["principal", "directeur_etudes"],
   },
 
@@ -79,26 +88,19 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
     allowedRoles: ["principal", "directeur_etudes"],
   },
 
-  // --- Finance & Administration ---
+  // --- Finance & Tarification ---
   {
     id: "fee-schedule",
     to: "/finance/fee-schedule",
     label: "Tarifs des classes",
-    category: "Finance & Administration",
+    category: "Finance",
     allowedRoles: ["principal", "directeur_etudes"],
   },
   {
     id: "finance-payments",
     to: "/finance/payments",
     label: "Enregistrer Paiement",
-    category: "Finance & Administration",
-    allowedRoles: ["principal", "directeur_etudes"],
-  },
-  {
-    id: "users",
-    to: "/users",
-    label: "Gestion Comptes",
-    category: "Finance & Administration",
+    category: "Finance",
     allowedRoles: ["principal", "directeur_etudes"],
   },
 

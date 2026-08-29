@@ -9,8 +9,10 @@ import {
   ClassRecord, 
   SchoolYearRecord, 
   DivisionRecord,
+  UserProfile,
   getActiveSchoolYear,
   listDivisions,
+  listUsers,
   supabase
 } from "@fanion/shared";
 
@@ -53,6 +55,7 @@ export const ClassModal: React.FC<ClassModalProps> = ({
 }) => {
   const [schoolYears, setSchoolYears] = useState<SchoolYearRecord[]>([]);
   const [divisions, setDivisions] = useState<DivisionRecord[]>([]);
+  const [teachers, setTeachers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -84,6 +87,9 @@ export const ClassModal: React.FC<ClassModalProps> = ({
         // Load divisions
         const divs = await listDivisions();
         setDivisions(divs);
+
+        const teacherList = await listUsers("enseignant");
+        setTeachers(teacherList);
 
         // Load all school years (so user can view or assign past/future if needed, but active is default)
         const { data: syData, error: syErr } = await supabase
@@ -248,12 +254,22 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             )}
           </div>
 
-          <Input
-            label="Professeur Principal (Optionnel)"
-            placeholder="Nom de l'enseignant..."
-            error={errors.head_teacher_name?.message}
-            {...register("head_teacher_name")}
-          />
+          <div className="w-full flex flex-col gap-1.5">
+            <label className="font-sans text-xs font-semibold text-slate uppercase tracking-wider">
+              Professeur Principal (Optionnel)
+            </label>
+            <select
+              className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
+              {...register("head_teacher_name")}
+            >
+              <option value="">-- Aucun professeur principal --</option>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.full_name}>
+                  {t.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">
             <Button

@@ -1,10 +1,30 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { supabase } from "./supabaseClient";
-import { Payment, AllocationResult, allocatePaymentToInstallments } from "./financeService";
+import { Payment, allocatePaymentToInstallments } from "./financeService";
+import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
+
+/**
+ * Structure interne utilisée par le template PDF pour afficher le tableau des tranches.
+ * Distincte de AllocationResult (service finance) qui n'a pas ce format.
+ */
+export interface ReceiptInstallmentRow {
+  name: string;
+  total_due: number;
+  allocated_from_payment: number;
+  paid_amount: number;
+  remaining_due: number;
+}
+
+export interface ReceiptAllocation {
+  installments: ReceiptInstallmentRow[];
+  totals: {
+    overallRemainingDue: number;
+  };
+}
 
 export interface GenerateReceiptOptions {
   payment: Payment;
-  allocation?: AllocationResult;
+  allocation?: ReceiptAllocation;
 }
 
 /**
@@ -17,24 +37,14 @@ function formatAmount(amt: number): string {
 }
 
 /**
- * Convertit un nombre en lettres (simplifié pour les montants courants)
- */
-function numberToWords(amount: number): string {
-  const num = Math.round(amount);
-  if (num === 0) return "zéro FCFA";
-  // Conversion basique / formateur générique pour le Cameroun (FCFA)
-  return `${formatAmount(num)} FCFA`;
-}
-
-/**
  * Génère le buffer du document PDF pour un reçu de paiement.
  */
 export async function createReceiptPdfBuffer(
   payment: Payment,
-  allocation?: AllocationResult
+  allocation?: ReceiptAllocation
 ): Promise<Uint8Array> {
   // 1. Récupération des informations de l'élève et de sa classe
-  const { data: student, error: studErr } = await supabase
+  const { data: student } = await supabase
     .from("students")
     .select("*, classes(name, level)")
     .eq("id", payment.student_id)
@@ -70,14 +80,13 @@ export async function createReceiptPdfBuffer(
 
       if (schedule && allPayments) {
         // Cumul payé en scolarité AVANT ce paiement
-        const previousPayments = allPayments.filter(
-          (p) => new Date(p.created_at) < new Date(payment.created_at) || p.id === payment.id
-        );
         const priorTuitionPaid = allPayments
           .filter((p) => new Date(p.created_at) < new Date(payment.created_at))
           .reduce((sum, p) => sum + Number(p.amount), 0);
 
-        const allocResult = allocatePaymentToInstallments(
+        // Appel utilisé uniquement pour valider la répartition (résultat non stocké ici,
+        // on recalcule manuellement ci-dessous pour le format PDF)
+        allocatePaymentToInstallments(
           schedule.installments_json,
           priorTuitionPaid,
           Number(payment.amount),
@@ -86,7 +95,6 @@ export async function createReceiptPdfBuffer(
 
         // Formater au format attendu par le template PDF
         const instList = schedule.installments_json || [];
-        let runningPaid = priorTuitionPaid + Number(payment.amount);
         let remPayment = Number(payment.amount);
         let prevAccumulated = priorTuitionPaid;
 
@@ -124,7 +132,7 @@ export async function createReceiptPdfBuffer(
           totals: {
             overallRemainingDue: Math.max(0, totalTuitionTarget - totalPaidSoFar),
           },
-        } as any;
+        } satisfies ReceiptAllocation;
       }
     } catch (err) {
       console.warn("Impossible de ré-allouer automatiquement les tranches pour le PDF:", err);
@@ -142,24 +150,12 @@ export async function createReceiptPdfBuffer(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-  // 3. Charger le logo officiel PNG
+  // 3. Charger le logo officiel PNG via Base64 embarqué (compatible Web, Electron .exe et Node)
   let logoImage: any = null;
   try {
-    if (typeof window !== "undefined" && typeof window.fetch === "function") {
-      const res = await fetch("/logo_fanion.png");
-      if (res.ok) {
-        const logoArrayBuffer = await res.arrayBuffer();
-        logoImage = await pdfDoc.embedPng(logoArrayBuffer);
-      }
-    } else {
-      const fs = require("fs");
-      const path = require("path");
-      const logoPath = path.resolve(process.cwd(), "logo_fanion.png");
-      if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        logoImage = await pdfDoc.embedPng(logoBuffer);
-      }
-    }
+    const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
+    const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+    logoImage = await pdfDoc.embedPng(logoBuffer);
   } catch (e) {
     console.warn("Avertissement: Logo PNG non chargé sur le reçu:", e);
   }
@@ -179,6 +175,17 @@ export async function createReceiptPdfBuffer(
     borderWidth: 1.5,
     color: rgb(1, 1, 1),
   });
+
+  // Filigrane logo centré sur toute la page (Point 6)
+  if (logoImage) {
+    page.drawImage(logoImage, {
+      x: width / 2 - 100,
+      y: height / 2 - 100,
+      width: 200,
+      height: 200,
+      opacity: 0.07, // Discret mais présent sur le reçu
+    });
+  }
 
   // ==========================================
   // EN-TÊTE ET LOGO
@@ -255,7 +262,7 @@ export async function createReceiptPdfBuffer(
   // ==========================================
   // INFORMATIONS DE L'ÉLÈVE
   // ==========================================
-  let contentY = headerY - 65;
+  let contentY = headerY - 70;
 
   const studentName = `${student.last_name.toUpperCase()} ${student.first_name}`;
   const className = student.classes
@@ -265,14 +272,14 @@ export async function createReceiptPdfBuffer(
   page.drawText("Reçu de M./Mme/Mlle :", {
     x: 35,
     y: contentY,
-    size: 9,
+    size: 10,
     font: fontRegular,
     color: slateColor,
   });
   page.drawText(studentName, {
-    x: 145,
+    x: 165,
     y: contentY,
-    size: 10,
+    size: 11,
     font: fontBold,
     color: inkColor,
   });
@@ -280,31 +287,31 @@ export async function createReceiptPdfBuffer(
   page.drawText("Matricule :", {
     x: 380,
     y: contentY,
-    size: 9,
+    size: 10,
     font: fontRegular,
     color: slateColor,
   });
   page.drawText(student.matricule || "-", {
-    x: 435,
+    x: 445,
     y: contentY,
-    size: 9.5,
+    size: 10.5,
     font: fontBold,
     color: inkColor,
   });
 
-  contentY -= 16;
+  contentY -= 22;
 
   page.drawText("Classe :", {
     x: 35,
     y: contentY,
-    size: 9,
+    size: 10,
     font: fontRegular,
     color: slateColor,
   });
   page.drawText(className, {
-    x: 145,
+    x: 165,
     y: contentY,
-    size: 9.5,
+    size: 10.5,
     font: fontBold,
     color: inkColor,
   });
@@ -312,7 +319,7 @@ export async function createReceiptPdfBuffer(
   page.drawText("Mode de règlement :", {
     x: 380,
     y: contentY,
-    size: 9,
+    size: 10,
     font: fontRegular,
     color: slateColor,
   });
@@ -324,25 +331,25 @@ export async function createReceiptPdfBuffer(
     check: "Chèque",
   };
   page.drawText(methodLabels[payment.method] || payment.method, {
-    x: 470,
+    x: 480,
     y: contentY,
-    size: 9,
+    size: 10,
     font: fontBold,
     color: inkColor,
   });
 
-  contentY -= 20;
+  contentY -= 26;
 
   // ==========================================
   // ENCADRÉ OBJET & MONTANT VERSÉ
   // ==========================================
   page.drawRectangle({
     x: 35,
-    y: contentY - 24,
+    y: contentY - 28,
     width: width - 70,
-    height: 26,
+    height: 32,
     borderColor: inkColor,
-    borderWidth: 1,
+    borderWidth: 1.2,
     color: rgb(0.95, 0.97, 1),
   });
 
@@ -353,22 +360,22 @@ export async function createReceiptPdfBuffer(
 
   page.drawText(`Objet du versement : ${categoryLabel}`, {
     x: 45,
-    y: contentY - 14,
-    size: 9.5,
+    y: contentY - 18,
+    size: 10.5,
     font: fontBold,
     color: inkColor,
   });
 
   const amountStr = `${formatAmount(Number(payment.amount))} FCFA`;
   page.drawText(`Montant Versé : ${amountStr}`, {
-    x: 340,
-    y: contentY - 14,
-    size: 10.5,
+    x: 330,
+    y: contentY - 18,
+    size: 11.5,
     font: fontBold,
     color: inkColor,
   });
 
-  contentY -= 38;
+  contentY -= 48;
 
   // ==========================================
   // TABLEAU DE RÉPARTITION ET DÉTAIL DES TRANCHES
@@ -376,68 +383,67 @@ export async function createReceiptPdfBuffer(
   page.drawText("RÉPARTITION DU PAIEMENT ET ÉTAT DES SOLDE(S) :", {
     x: 35,
     y: contentY,
-    size: 8.5,
+    size: 9.5,
     font: fontBold,
     color: inkColor,
   });
 
-  contentY -= 14;
+  contentY -= 18;
 
-  if (allocation && allocation.installments && allocation.installments.length > 0) {
-    // Entête du tableau (Tranche | Montant Alloué ce jour | Cumul Payé | Reste Dû Tranche)
+  if (allocation && (allocation as ReceiptAllocation).installments && (allocation as ReceiptAllocation).installments.length > 0) {
     const tableX = 35;
     const tableWidth = width - 70;
-    const colWidths = [140, 110, 110, 115];
+    const colWidths = [150, 115, 115, 120];
 
     page.drawRectangle({
       x: tableX,
-      y: contentY - 16,
+      y: contentY - 22,
       width: tableWidth,
-      height: 18,
+      height: 24,
       borderColor: inkColor,
-      borderWidth: 0.8,
+      borderWidth: 1,
       color: inkColor,
     });
 
-    page.drawText("Tranche", { x: tableX + 8, y: contentY - 12, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText("Alloué ce jour", { x: tableX + colWidths[0] + 8, y: contentY - 12, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText("Cumul Payé", { x: tableX + colWidths[0] + colWidths[1] + 8, y: contentY - 12, size: 8, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText("Reste Dû Tranche", { x: tableX + colWidths[0] + colWidths[1] + colWidths[2] + 8, y: contentY - 12, size: 8, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText("Tranche", { x: tableX + 10, y: contentY - 16, size: 9.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText("Alloué ce jour", { x: tableX + colWidths[0] + 10, y: contentY - 16, size: 9.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText("Cumul Payé", { x: tableX + colWidths[0] + colWidths[1] + 10, y: contentY - 16, size: 9.5, font: fontBold, color: rgb(1, 1, 1) });
+    page.drawText("Reste Dû Tranche", { x: tableX + colWidths[0] + colWidths[1] + colWidths[2] + 10, y: contentY - 16, size: 9.5, font: fontBold, color: rgb(1, 1, 1) });
 
-    contentY -= 18;
+    contentY -= 24;
 
-    allocation.installments.forEach((inst, idx) => {
+    (allocation as ReceiptAllocation).installments.forEach((inst: ReceiptInstallmentRow, idx: number) => {
       const isEven = idx % 2 === 0;
       page.drawRectangle({
         x: tableX,
-        y: contentY - 14,
+        y: contentY - 22,
         width: tableWidth,
-        height: 15,
+        height: 23,
         borderColor: lineColor,
         borderWidth: 0.5,
         color: isEven ? bgLight : rgb(1, 1, 1),
       });
 
       page.drawText(`${inst.name} (${formatAmount(inst.total_due)} FCFA)`, {
-        x: tableX + 8,
-        y: contentY - 10,
-        size: 7.5,
+        x: tableX + 10,
+        y: contentY - 16,
+        size: 9,
         font: fontRegular,
         color: inkColor,
       });
 
       page.drawText(`${formatAmount(inst.allocated_from_payment)} FCFA`, {
-        x: tableX + colWidths[0] + 8,
-        y: contentY - 10,
-        size: 7.5,
+        x: tableX + colWidths[0] + 10,
+        y: contentY - 16,
+        size: 9,
         font: inst.allocated_from_payment > 0 ? fontBold : fontRegular,
         color: inst.allocated_from_payment > 0 ? rgb(0.05, 0.4, 0.1) : slateColor,
       });
 
       page.drawText(`${formatAmount(inst.paid_amount)} FCFA`, {
-        x: tableX + colWidths[0] + colWidths[1] + 8,
-        y: contentY - 10,
-        size: 7.5,
+        x: tableX + colWidths[0] + colWidths[1] + 10,
+        y: contentY - 16,
+        size: 9,
         font: fontRegular,
         color: inkColor,
       });
@@ -446,109 +452,115 @@ export async function createReceiptPdfBuffer(
       const remainingText = inst.remaining_due > 0 ? `${formatAmount(inst.remaining_due)} FCFA` : "SOLDÉE";
 
       page.drawText(remainingText, {
-        x: tableX + colWidths[0] + colWidths[1] + colWidths[2] + 8,
-        y: contentY - 10,
-        size: 7.5,
+        x: tableX + colWidths[0] + colWidths[1] + colWidths[2] + 10,
+        y: contentY - 16,
+        size: 9,
         font: fontBold,
         color: remainingColor,
       });
 
-      contentY -= 15;
+      contentY -= 23;
     });
 
-    contentY -= 8;
+    contentY -= 10;
 
     // Synthèse globale des restes dûs (Bandeau récapitulatif)
     page.drawRectangle({
       x: tableX,
-      y: contentY - 20,
+      y: contentY - 24,
       width: tableWidth,
-      height: 22,
+      height: 26,
       borderColor: inkColor,
-      borderWidth: 1,
+      borderWidth: 1.2,
       color: rgb(0.93, 0.95, 0.98),
     });
 
-    const overallDue = allocation.totals.overallRemainingDue;
+    const overallDue = (allocation as ReceiptAllocation).totals.overallRemainingDue;
     const dueColor = overallDue > 0 ? rgb(0.75, 0.1, 0.1) : rgb(0.1, 0.5, 0.1);
     const dueStatusText = overallDue > 0 ? `${formatAmount(overallDue)} FCFA` : "SCOLARITÉ TOTALEMENT SOLDÉE";
 
     page.drawText(`RESTE À PAYER (TOTAL SCOLARITÉ) :`, {
-      x: tableX + 10,
-      y: contentY - 13,
-      size: 8.5,
+      x: tableX + 12,
+      y: contentY - 17,
+      size: 9.5,
       font: fontBold,
       color: inkColor,
     });
 
     page.drawText(dueStatusText, {
-      x: tableX + 260,
-      y: contentY - 13,
-      size: 9.5,
+      x: tableX + 270,
+      y: contentY - 17,
+      size: 10.5,
       font: fontBold,
       color: dueColor,
     });
 
-    contentY -= 30;
+    contentY -= 36;
 
   } else {
-    // Si pas d'allocation (ex: inscription simple)
     const targetSummary = payment.tranche_ciblee || "Versement d'inscription enregistré";
     page.drawText(targetSummary, {
       x: 45,
       y: contentY,
-      size: 8.5,
+      size: 9.5,
       font: fontRegular,
       color: inkColor,
     });
-    contentY -= 20;
+    contentY -= 24;
   }
 
   // ==========================================
   // BAS DE PAGE / SIGNATURE
   // ==========================================
-  const footerY = 70;
+  const footerY = Math.max(contentY - 25, 95);
 
   page.drawText("Cadre réservé à l'administration", {
-    x: width - 210,
+    x: width - 220,
     y: footerY,
-    size: 8,
+    size: 9,
     font: fontItalic,
     color: slateColor,
   });
 
   page.drawText("Le Principal", {
-    x: width - 170,
-    y: footerY - 13,
-    size: 8.5,
+    x: width - 175,
+    y: footerY - 16,
+    size: 9.5,
     font: fontBold,
     color: inkColor,
   });
 
   // Zone de cachet / signature
   page.drawRectangle({
-    x: width - 210,
-    y: 25,
-    width: 175,
-    height: 30,
+    x: width - 220,
+    y: footerY - 62,
+    width: 185,
+    height: 40,
     borderColor: lineColor,
-    borderWidth: 0.8,
+    borderWidth: 1,
     color: rgb(1, 1, 1),
   });
 
   page.drawText("Signature & Cachet", {
-    x: width - 165,
-    y: 35,
-    size: 7.5,
+    x: width - 170,
+    y: footerY - 48,
+    size: 8.5,
     font: fontItalic,
-    color: rgb(0.7, 0.7, 0.7),
+    color: rgb(0.6, 0.6, 0.6),
   });
 
-  // Mention légale de bas de page gauche
+  // Mentions légales bas de page gauche
   page.drawText("NB : Ce reçu doit être conservé comme preuve de paiement.", {
     x: 35,
-    y: 30,
-    size: 7,
+    y: 45,
+    size: 8,
+    font: fontItalic,
+    color: slateColor,
+  });
+  page.drawText("Les frais de scolarité sont non remboursables.", {
+    x: 35,
+    y: 32,
+    size: 8,
     font: fontItalic,
     color: slateColor,
   });

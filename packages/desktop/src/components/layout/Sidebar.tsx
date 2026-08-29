@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { getGroupedNavItemsForRole } from "@fanion/shared";
+import logoFanion from "@/assets/logo_fanion.webp";
 
 interface SidebarProps {
   userRole?: string;
@@ -124,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ userRole }) => {
       <div className="p-4 flex items-center gap-3 border-b border-line/10">
         <div className="w-10 h-10 rounded-full bg-white/10 p-1 flex items-center justify-center flex-shrink-0 shadow-sm border border-white/20">
           <img
-            src="/logo_fanion.webp"
+            src={logoFanion}
             alt="Logo Collège Le Fanion"
             className="w-full h-full object-contain"
           />

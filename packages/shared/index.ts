@@ -14,3 +14,4 @@ export * from "./api/financeService";
 export * from "./services/classReportService";
 export * from "./config/navigation";
 export * from "./hooks/useSelectionPersistence";
+export * from "./assets/logoBase64";

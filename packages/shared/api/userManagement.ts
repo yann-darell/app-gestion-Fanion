@@ -77,6 +77,21 @@ export async function updateUser(
         division_scope?: string | null;
     }
 ): Promise<UserProfile> {
+    // Vérification préalable pour empêcher la modification de comptes de direction
+    const { data: targetProfile, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", id)
+        .single();
+        
+    if (fetchErr) {
+        throw new Error("Impossible de vérifier les permissions du compte ciblé.");
+    }
+    
+    if (targetProfile?.role === "principal" || targetProfile?.role === "directeur_etudes") {
+        throw new Error("Action interdite : les comptes de l'équipe de direction ne peuvent pas être modifiés.");
+    }
+
     const { data, error } = await supabase
         .from("profiles")
         .update({
@@ -100,6 +115,21 @@ export async function updateUser(
  * Supprime un profil utilisateur.
  */
 export async function deleteUser(id: string): Promise<void> {
+    // Vérification préalable pour empêcher la suppression de comptes de direction
+    const { data: targetProfile, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", id)
+        .single();
+        
+    if (fetchErr) {
+        throw new Error("Impossible de vérifier les permissions du compte ciblé.");
+    }
+    
+    if (targetProfile?.role === "principal" || targetProfile?.role === "directeur_etudes") {
+        throw new Error("Action interdite : les comptes de l'équipe de direction ne peuvent pas être supprimés.");
+    }
+
     const { error } = await supabase
         .from("profiles")
         .delete()

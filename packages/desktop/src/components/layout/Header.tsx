@@ -1,4 +1,5 @@
 import React from "react";
+import logoFanion from "@/assets/logo_fanion.webp";
 
 interface HeaderProps {
     userFullName?: string;
@@ -10,7 +11,7 @@ export const Header: React.FC<HeaderProps> = ({ userFullName, userRole, onLogout
     return (
         <header className="h-16 border-b border-line bg-white px-6 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
-                <img src="/logo_fanion.webp" alt="Logo Le Fanion" className="w-7 h-7 object-contain" />
+                <img src={logoFanion} alt="Logo Le Fanion" className="w-7 h-7 object-contain" />
                 <span className="font-sans text-sm font-semibold text-ink">
                     Le Fanion — Système de Gestion Administrative
                 </span>

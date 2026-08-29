@@ -9,6 +9,7 @@ import {
   getReceiptSignedUrl,
   StudentRecord,
   ClassRecord,
+  PaymentWithReceipt,
 } from "@fanion/shared";
 import NewStudentModal from "./components/NewStudentModal";
 
@@ -260,7 +261,7 @@ function StudentPaymentsHistorySection({
   studentId: string;
   studentName: string;
 }) {
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentWithReceipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
@@ -272,6 +273,7 @@ function StudentPaymentsHistorySection({
         setPayments(data || []);
       } catch (e) {
         console.error("Erreur chargement paiements élève:", e);
+        setPayments([]);
       } finally {
         setLoading(false);
       }
@@ -292,24 +294,25 @@ function StudentPaymentsHistorySection({
     );
   }
 
+  const hasPayments = Array.isArray(payments) && payments.length > 0;
+
   return (
     <div className="mt-8 pt-4 border-t border-line space-y-3">
       <h3 className="font-display text-lg font-bold text-ink border-b border-line pb-2 flex items-center justify-between">
         <span>Historique des paiements & Reçus</span>
         <span className="text-xs font-normal text-slate font-sans">
-          {payments.length} versement(s)
+          {hasPayments ? payments.length : 0} versement(s)
         </span>
       </h3>
 
-      {payments.length === 0 ? (
+      {!hasPayments ? (
         <p className="text-xs text-slate italic py-2">
           Aucun paiement enregistré pour cet élève.
         </p>
       ) : (
         <div className="space-y-2">
-          {payments.map((item) => {
-            const p = item.payment;
-            const pdfPath = item.pdfPath;
+          {payments.map((p) => {
+            const pdfPath = p.receipt_pdf_path;
             return (
               <div
                 key={p.id}

@@ -6,8 +6,10 @@ import {
   ClassRecord,
   SchoolYearRecord,
   DivisionRecord,
+  UserProfile,
   getActiveSchoolYear,
   listDivisions,
+  listUsers,
   supabase,
 } from "@fanion/shared";
 
@@ -45,6 +47,7 @@ export const ClassModal: React.FC<ClassModalProps> = ({
 }) => {
   const [schoolYears, setSchoolYears] = useState<SchoolYearRecord[]>([]);
   const [divisions, setDivisions] = useState<DivisionRecord[]>([]);
+  const [teachers, setTeachers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -75,6 +78,9 @@ export const ClassModal: React.FC<ClassModalProps> = ({
       try {
         const divs = await listDivisions();
         setDivisions(divs);
+
+        const teacherList = await listUsers("enseignant");
+        setTeachers(teacherList);
 
         const { data: syData, error: syErr } = await supabase
           .from("school_years")
@@ -299,11 +305,17 @@ export const ClassModal: React.FC<ClassModalProps> = ({
                   Professeur Principal{" "}
                   <span className="normal-case text-slate/60">(optionnel)</span>
                 </label>
-                <input
+                <select
                   className={inputCls(false)}
-                  placeholder="Nom de l'enseignant…"
                   {...register("head_teacher_name")}
-                />
+                >
+                  <option value="">-- Aucun professeur principal --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.full_name}>
+                      {t.full_name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Actions */}

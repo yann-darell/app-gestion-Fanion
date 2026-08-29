@@ -13,14 +13,12 @@ import {
   ClassReportData,
 } from "@fanion/shared/services/classReportService";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
   Tooltip,
   ResponsiveContainer,
-  Cell,
+  Legend,
 } from "recharts";
 
 interface ClassReportPageProps {
@@ -303,26 +301,42 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
             </div>
           </div>
 
-          {/* Graphique Distribution */}
+          {/* Graphique Distribution — Donut (Point 4) */}
           <div className="bg-white border border-line rounded p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-ink font-display mb-2">Distribution des Moyennes</h3>
-            <div className="h-44 w-full pt-2">
+            <h3 className="text-sm font-semibold text-ink font-display mb-3">Distribution des Moyennes par Tranche</h3>
+            <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={reportData.distribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E4E0D6" vertical={false} />
-                  <XAxis dataKey="range" tick={{ fontSize: 10, fill: "#64748B" }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "#64748B" }} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "#FFFFFF", borderColor: "#E4E0D6", borderRadius: "4px" }}
-                    formatter={(value: any) => [`${value} élève(s)`, "Nombre"]}
-                    labelFormatter={(label) => `Tranche: ${label}`}
-                  />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {reportData.distribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                <PieChart>
+                  <Pie
+                    data={reportData.distribution.filter(d => d.count > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="52%"
+                    outerRadius="75%"
+                    paddingAngle={3}
+                    dataKey="count"
+                    nameKey="range"
+                    label={(props: any) =>
+                      props.count > 0
+                        ? `${props.range} · ${props.count} (${((props.percent || 0) * 100).toFixed(0)}%)`
+                        : ""
+                    }
+                    labelLine={true}
+                  >
+                    {reportData.distribution.filter(d => d.count > 0).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="white" strokeWidth={2} />
                     ))}
-                  </Bar>
-                </BarChart>
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#FFFFFF", borderColor: "#E4E0D6", borderRadius: "4px", fontSize: "12px" }}
+                    formatter={(value: any, name: any) => [`${value} élève(s)`, name]}
+                  />
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    formatter={(value) => <span style={{ fontSize: "10px", color: "#5B6B82" }}>{value}</span>}
+                  />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           </div>

@@ -272,18 +272,24 @@ export interface PaymentWithReceipt extends Payment {
 }
 
 /**
- * Récupère l'historique des paiements d'un élève pour une année scolaire avec le chemin PDF du reçu.
+ * Récupère l'historique des paiements d'un élève (avec le chemin PDF du reçu).
+ * schoolYearId est optionnel : si absent, retourne tous les paiements toutes années confondues.
  */
 export async function getStudentPaymentsWithReceipts(
   studentId: string,
-  schoolYearId: string
+  schoolYearId?: string
 ): Promise<PaymentWithReceipt[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("payments")
     .select("*, receipts(pdf_path)")
     .eq("student_id", studentId)
-    .eq("school_year_id", schoolYearId)
     .order("created_at", { ascending: true });
+
+  if (schoolYearId) {
+    query = query.eq("school_year_id", schoolYearId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Erreur lors de la récupération des paiements de l'élève: ${error.message}`);
@@ -294,6 +300,7 @@ export async function getStudentPaymentsWithReceipts(
     receipt_pdf_path: item.receipts?.[0]?.pdf_path || item.receipts?.pdf_path || undefined,
   }));
 }
+
 
 /**
  * Enregistre un nouveau paiement en calculant automatiquement la répartition par tranche,
@@ -390,7 +397,7 @@ export async function createPayment(params: {
       }
 
       const tuitionPayment = Array.isArray(tuitionData) ? tuitionData[0] : tuitionData;
-      const tuitionReceipt = await generateAndSaveReceipt({ payment: tuitionPayment, allocation });
+      const tuitionReceipt = await generateAndSaveReceipt({ payment: tuitionPayment, allocation: allocation as any });
 
       // Synthèse combinée pour l'affichage de la confirmation
       const combinedPayment: Payment = {
@@ -430,7 +437,7 @@ export async function createPayment(params: {
       }
 
       const createdPayment = Array.isArray(data) ? data[0] : data;
-      const receiptRes = await generateAndSaveReceipt({ payment: createdPayment, allocation });
+      const receiptRes = await generateAndSaveReceipt({ payment: createdPayment, allocation: allocation as any });
 
       return {
         payment: createdPayment,
@@ -468,7 +475,7 @@ export async function createPayment(params: {
   const createdPayment = Array.isArray(data) ? data[0] : data;
   const receiptRes = await generateAndSaveReceipt({
     payment: createdPayment,
-    allocation: category === "tuition" ? allocation : undefined,
+    allocation: category === "tuition" ? (allocation as any) : undefined,
   });
 
   return {
@@ -498,7 +505,7 @@ export async function deletePayment(paymentId: string): Promise<void> {
 
   // 3. Supprimer le fichier Storage de façon explicite
   if (pdfPath) {
-    const { data: remData, error: storageErr } = await supabase.storage
+    const { error: storageErr } = await supabase.storage
       .from("receipts")
       .remove([pdfPath]);
 

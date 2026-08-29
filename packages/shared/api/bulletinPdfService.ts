@@ -4,6 +4,7 @@ import { generateClassReport } from "../services/classReportService";
 import { getAppreciationCode } from "./gradeCalculations";
 import { listCoefficients, listSubjectGroups } from "./subjects";
 import { listAssignments } from "./teacherAssignments";
+import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
 
 export interface GenerateBulletinOptions {
   studentId: string;
@@ -129,26 +130,12 @@ export async function createStudentBulletinPdfBuffer(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.TimesRoman);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-  // 3. Charger le logo officiel PNG (logo_fanion.png) de manière universelle (Web et Node)
+  // 3. Charger le logo officiel PNG via Base64 embarqué (compatible Web, Electron .exe et Node)
   let logoImage: any = null;
   try {
-    if (typeof window !== "undefined" && typeof window.fetch === "function") {
-      // Environnement Navigateur / Web / Electron renderer
-      const res = await fetch("/logo_fanion.png");
-      if (res.ok) {
-        const logoArrayBuffer = await res.arrayBuffer();
-        logoImage = await pdfDoc.embedPng(logoArrayBuffer);
-      }
-    } else {
-      // Environnement Node.js (scripts de test)
-      const fs = require("fs");
-      const path = require("path");
-      const logoPath = path.resolve(process.cwd(), "logo_fanion.png");
-      if (fs.existsSync(logoPath)) {
-        const logoBuffer = fs.readFileSync(logoPath);
-        logoImage = await pdfDoc.embedPng(logoBuffer);
-      }
-    }
+    const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
+    const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+    logoImage = await pdfDoc.embedPng(logoBuffer);
   } catch (e) {
     console.warn("Avertissement: Logo PNG non chargé:", e);
   }
@@ -203,13 +190,13 @@ export async function createStudentBulletinPdfBuffer(
   // Pointillés 3 (sous Téléphone)
   page.drawText("- - - - - - - - - - - - - - - - - - - - -", { x: 28, y: headerTopY - 56, size: 6, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
 
-  // Logo Centré Net (non filigrane)
+  // Logo Centré Net (Agrandissement pour meilleure lisibilité)
   if (logoImage) {
     page.drawImage(logoImage, {
-      x: width / 2 - 30,
-      y: headerTopY - 55,
-      width: 60,
-      height: 60,
+      x: width / 2 - 35,
+      y: headerTopY - 60,
+      width: 70,
+      height: 70,
     });
   }
 
@@ -342,18 +329,7 @@ export async function createStudentBulletinPdfBuffer(
   page.drawText(`DATE ET LIEU DE NAISSANCE : ${student.birth_date || "-"} à ${student.birth_place || "-"}`, { x: marginX + 6, y: idBoxY + 5, size: 8.5, font: fontBold });
   page.drawText(`NAT : ${student.nationality || "Camerounaise"}`, { x: marginX + 360, y: idBoxY + 5, size: 8.5, font: fontBold });
 
-  // ==========================================
-  // FILIGRANE DU LOGO CENTRÉ (Opacité bien visible 20%)
-  // ==========================================
-  if (logoImage) {
-    page.drawImage(logoImage, {
-      x: width / 2 - 110,
-      y: height / 2 - 120,
-      width: 220,
-      height: 220,
-      opacity: 0.20, // Visible et lisible sans masquer le texte
-    });
-  }
+
 
   // ==========================================
   // 4. GRILLE DE NOTES PAR GROUPE (I À IV)
@@ -370,7 +346,7 @@ export async function createStudentBulletinPdfBuffer(
     ? ["MATIÈRES", "COMPÉTENCES ÉVALUÉES", "TRIM", "SEQ", "COEF", "MOY × COEF", "MOY DE CLASSE", "RANG", "APPRÉCIATION"]
     : ["MATIÈRES", "TRIM", "SEQ", "COEF", "MOY × COEF", "MOY DE CLASSE", "RANG", "APPRÉCIATION"];
 
-  // Dessiner l'en-tête du tableau
+  // Dessiner l'en-tête du tableau (fond transparent pour filigrane)
   page.drawRectangle({
     x: marginX,
     y: tableY - 14,
@@ -378,7 +354,6 @@ export async function createStudentBulletinPdfBuffer(
     height: 14,
     borderColor: rgb(0, 0, 0),
     borderWidth: 0.8,
-    color: rgb(1, 1, 1),
   });
 
   let curX = marginX;
@@ -408,7 +383,7 @@ export async function createStudentBulletinPdfBuffer(
     // Espace de séparation visuelle entre les groupes
     tableY -= 4;
 
-    // Entête de Groupe (Fond Blanc, Texte Gras)
+    // Entête de Groupe (Texte Gras, fond transparent pour filigrane)
     page.drawRectangle({
       x: marginX,
       y: tableY - 12,
@@ -416,7 +391,6 @@ export async function createStudentBulletinPdfBuffer(
       height: 12,
       borderColor: rgb(0, 0, 0),
       borderWidth: 0.8,
-      color: rgb(1, 1, 1),
     });
     page.drawText(`GROUPE ${grp.label} : MATIÈRES ${(grp as any).name?.toUpperCase() || ""}`, {
       x: marginX + 5,
@@ -435,14 +409,14 @@ export async function createStudentBulletinPdfBuffer(
       const subName = sub ? sub.name : "Matière";
       const teacherName = getTeacherName(c.subject_id);
 
-      // Si filigrane actif à partir de la 4ème ligne
+      // Filigrane du logo unique centré sur le tableau (opacité 0.22)
       if (rowCounter === 4 && logoImage) {
         page.drawImage(logoImage, {
-          x: width / 2 - 100,
-          y: tableY - 180,
-          width: 200,
-          height: 200,
-          opacity: 0.12,
+          x: width / 2 - 130,
+          y: tableY - 200,
+          width: 260,
+          height: 260,
+          opacity: 0.22,
         });
       }
 
@@ -465,7 +439,7 @@ export async function createStudentBulletinPdfBuffer(
         height: rowHeight,
         borderColor: rgb(0, 0, 0),
         borderWidth: 0.5,
-        color: rgb(1, 1, 1),
+        // color: transparent pour faire apparaître le filigrane conformément au DESIGN_VISUEL.md
       });
 
       // Rendu des séparateurs verticaux pour chaque colonne de la ligne

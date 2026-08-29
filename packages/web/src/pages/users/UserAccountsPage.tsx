@@ -422,16 +422,16 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                               </p>
                             </div>
                             <div>
-                              <button
-                                onClick={() => openEditModal(u)}
-                                className="px-2.5 py-1 text-xs font-medium bg-white hover:bg-purple-100 border border-purple-200 rounded text-purple-900 transition flex items-center gap-1 shadow-xs"
-                                title="Modifier ce profil administrateur"
+                              {/* Bouton verrouillé — Point 7b : l'édition est bloquée côté DB (RLS) */}
+                              <span
+                                className="px-2.5 py-1 text-xs font-medium bg-white border border-purple-100 rounded text-purple-300 flex items-center gap-1 cursor-not-allowed select-none"
+                                title="Compte protégé — non modifiable (voir SECURITE.md)"
                               >
-                                <svg className="w-3.5 h-3.5 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
-                                <span>Éditer</span>
-                              </button>
+                                <span>Protégé</span>
+                              </span>
                             </div>
                           </div>
                         ))}
