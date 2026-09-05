@@ -12,6 +12,7 @@ export * from "./api/bulletinPdfService";
 export * from "./api/receiptPdfService";
 export * from "./api/financeService";
 export * from "./services/classReportService";
+export * from "./services/settingsService";
 export * from "./config/navigation";
 export * from "./hooks/useSelectionPersistence";
 export * from "./assets/logoBase64";

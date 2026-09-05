@@ -7,6 +7,7 @@ export interface UserProfile {
     email?: string | null;
     role: "principal" | "directeur_etudes" | "enseignant" | string;
     division_scope?: string | null;
+    is_active?: boolean;
     created_at: string;
 }
 
@@ -53,7 +54,7 @@ export async function inviteTeacher(
 export async function listUsers(roleFilter?: string): Promise<UserProfile[]> {
     let query = supabase
         .from("profiles")
-        .select("id, full_name, email, role, division_scope, created_at")
+        .select("id, full_name, email, role, division_scope, is_active, created_at")
         .order("created_at", { ascending: false });
 
     if (roleFilter && roleFilter !== "all") {

@@ -17,6 +17,7 @@ import ClassReportPage from "./pages/reports/ClassReportPage";
 import BulletinsPdfPage from "./pages/reports/BulletinsPdfPage";
 import FeeSchedulePage from "./pages/finance/FeeSchedulePage";
 import PaymentEntryPage from "./pages/finance/PaymentEntryPage";
+import { SettingsPage } from "./pages/settings/SettingsPage";
 
 type Profile = {
   id: string;
@@ -467,7 +468,7 @@ export default function App() {
 
             <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Bulletins &amp; Notes</h2><p className="text-slate mt-2">Module en cours de migration…</p></div>} />
             <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Finance &amp; Scolarité</h2><p className="text-slate mt-2">Module en cours de migration…</p></div>} />
-            <Route path="settings" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Paramètres</h2><p className="text-slate mt-2">Module en cours de migration…</p></div>} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

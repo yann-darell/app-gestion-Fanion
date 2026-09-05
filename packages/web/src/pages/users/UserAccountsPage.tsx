@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { inviteTeacher, listUsers, updateUser, deleteUser, UserProfile } from "@fanion/shared";
+import { inviteTeacher, listUsers, updateUser, deleteUser, toggleTeacherStatus, UserProfile } from "@fanion/shared";
+import { DeactivateUserModal } from "../settings/components/DeactivateUserModal";
 
 interface UserAccountsPageProps {
   userRole?: string;
@@ -34,7 +35,53 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
   const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Toggle Activation State
+  const [selectedTeacherForDeactivation, setSelectedTeacherForDeactivation] = useState<UserProfile | null>(null);
+  const [submittingToggleId, setSubmittingToggleId] = useState<string | null>(null);
+
   const isAuthorized = userRole === "principal" || userRole === "directeur_etudes";
+
+  const handleToggleClick = async (u: UserProfile) => {
+    if (u.role === "principal" || u.role === "directeur_etudes") return;
+    const isActive = u.is_active !== false;
+    if (isActive) {
+      setSelectedTeacherForDeactivation(u);
+    } else {
+      setSubmittingToggleId(u.id);
+      setUserError(null);
+      setGlobalSuccess(null);
+      try {
+        await toggleTeacherStatus(u.id, true);
+        setGlobalSuccess(`Le compte de ${u.full_name} a été réactivé avec succès.`);
+        await fetchUsersList();
+      } catch (err: any) {
+        console.error("Erreur réactivation enseignant:", err);
+        setUserError(err?.message || "Échec de la réactivation du compte.");
+      } finally {
+        setSubmittingToggleId(null);
+      }
+    }
+  };
+
+  const handleConfirmDeactivation = async () => {
+    if (!selectedTeacherForDeactivation) return;
+    const u = selectedTeacherForDeactivation;
+    setSubmittingToggleId(u.id);
+    setUserError(null);
+    setGlobalSuccess(null);
+
+    try {
+      await toggleTeacherStatus(u.id, false);
+      setGlobalSuccess(`Le compte de ${u.full_name} a été désactivé et sa session a été révoquée immédiatement.`);
+      setSelectedTeacherForDeactivation(null);
+      await fetchUsersList();
+    } catch (err: any) {
+      console.error("Erreur désactivation enseignant:", err);
+      setUserError(err?.message || "Échec de la désactivation du compte.");
+    } finally {
+      setSubmittingToggleId(null);
+    }
+  };
 
   const fetchUsersList = async () => {
     try {
@@ -470,6 +517,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                               <th className="px-4 py-3">Nom complet</th>
                               <th className="px-4 py-3">Email</th>
                               <th className="px-4 py-3">Rôle</th>
+                              <th className="px-4 py-3">Statut</th>
                               <th className="px-4 py-3">Division</th>
                               <th className="px-4 py-3 text-right">Actions</th>
                             </tr>
@@ -486,11 +534,37 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                     {u.email || "— non renseigné —"}
                                   </td>
                                   <td className="px-4 py-3">{getRoleBadge(u.role)}</td>
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                        u.is_active !== false ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${u.is_active !== false ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                      {u.is_active !== false ? "Actif" : "Inactif"}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3 text-xs text-slate">
                                     {u.division_scope ? u.division_scope.toUpperCase() : "Toutes"}
                                   </td>
                                   <td className="px-4 py-3 text-right">
                                     <div className="flex items-center justify-end gap-2">
+                                      <button
+                                        onClick={() => handleToggleClick(u)}
+                                        disabled={submittingToggleId === u.id}
+                                        className={`px-2 py-1 text-xs font-medium rounded transition flex items-center gap-1 ${
+                                          u.is_active !== false
+                                            ? "bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800"
+                                            : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                        }`}
+                                        title={u.is_active !== false ? "Désactiver cet enseignant" : "Réactiver cet enseignant"}
+                                      >
+                                        {submittingToggleId === u.id
+                                          ? "..."
+                                          : u.is_active !== false
+                                          ? "Désactiver"
+                                          : "Réactiver"}
+                                      </button>
                                       <button
                                         onClick={() => openEditModal(u)}
                                         className="px-2.5 py-1 text-xs font-medium bg-white hover:bg-paper border border-line rounded text-ink transition flex items-center gap-1"
@@ -526,7 +600,16 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                           .map((u) => (
                             <div key={u.id} className="p-3.5 flex flex-col gap-2 bg-white">
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-ink">{u.full_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-ink">{u.full_name}</span>
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      u.is_active !== false ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                    }`}
+                                  >
+                                    {u.is_active !== false ? "Actif" : "Inactif"}
+                                  </span>
+                                </div>
                                 {getRoleBadge(u.role)}
                               </div>
                               <div className="flex items-center justify-between text-xs text-slate font-mono">
@@ -536,6 +619,17 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                 </span>
                               </div>
                               <div className="flex items-center justify-end gap-2 pt-1 border-t border-line/40">
+                                <button
+                                  onClick={() => handleToggleClick(u)}
+                                  disabled={submittingToggleId === u.id}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded ${
+                                    u.is_active !== false
+                                      ? "bg-amber-50 border border-amber-200 text-amber-800"
+                                      : "bg-emerald-600 text-white font-semibold"
+                                  }`}
+                                >
+                                  {submittingToggleId === u.id ? "..." : u.is_active !== false ? "Désactiver" : "Réactiver"}
+                                </button>
                                 <button
                                   onClick={() => openEditModal(u)}
                                   className="px-2.5 py-1 text-xs font-medium bg-paper border border-line rounded text-ink"
@@ -698,6 +792,15 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
           </div>
         </div>
       )}
+
+      {/* DEACTIVATE USER CONFIRMATION MODAL */}
+      <DeactivateUserModal
+        isOpen={selectedTeacherForDeactivation !== null}
+        teacher={selectedTeacherForDeactivation}
+        onClose={() => setSelectedTeacherForDeactivation(null)}
+        onConfirm={handleConfirmDeactivation}
+        isSubmitting={submittingToggleId === selectedTeacherForDeactivation?.id}
+      />
     </div>
   );
 };
