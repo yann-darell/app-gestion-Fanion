@@ -1,3 +1,4 @@
+import { UsersIcon } from "../../../components/ui/Icons";
 import React, { useState } from "react";
 import { TeacherAccount, toggleTeacherStatus } from "@fanion/shared";
 import { DeactivateUserModal } from "./DeactivateUserModal";
@@ -58,7 +59,7 @@ export const UserAccountsTab: React.FC<UserAccountsTabProps> = ({ teachers, onRe
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <span>👥</span> Gestion des Comptes Enseignants
+            <UsersIcon className="w-5 h-5 text-indigo-700" /> Gestion des Comptes Enseignants
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Activez ou désactivez les accès des enseignants. La désactivation coupe immédiatement toute session en cours.

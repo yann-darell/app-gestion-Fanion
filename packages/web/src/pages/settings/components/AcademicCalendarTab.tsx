@@ -1,3 +1,4 @@
+import { CalendarIcon, LockIcon, UnlockIcon } from "../../../components/ui/Icons";
 import React, { useState } from "react";
 import { TermSetting, updateSequenceSettings, updateTermDates } from "@fanion/shared";
 
@@ -63,7 +64,7 @@ export const AcademicCalendarTab: React.FC<AcademicCalendarTabProps> = ({ terms,
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <span>📅</span> Calendrier Académique & Verrouillage des Séquences
+              <CalendarIcon className="w-5 h-5 text-indigo-700" /> Calendrier Académique & Verrouillage des Séquences
             </h2>
             <p className="text-xs text-slate-500 mt-1">
               Définissez les dates d'ouverture/fermeture et verrouillez les séquences pour empêcher toute modification de notes par les enseignants.
@@ -127,7 +128,7 @@ export const AcademicCalendarTab: React.FC<AcademicCalendarTabProps> = ({ terms,
                               seq.is_locked ? "bg-amber-200 text-amber-900" : "bg-emerald-100 text-emerald-800"
                             }`}
                           >
-                            {seq.is_locked ? "🔒 Verrouillée" : "🔓 Ouverte"}
+                            {seq.is_locked ? <span className="inline-flex items-center gap-1"><LockIcon className="w-3.5 h-3.5" /> Verrouillée</span> : <span className="inline-flex items-center gap-1"><UnlockIcon className="w-3.5 h-3.5" /> Ouverte</span>}
                           </span>
                           <button
                             onClick={() => handleSequenceToggleLock(seq.id, seq.is_locked)}

@@ -95,7 +95,7 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
 
           {success ? (
             <div className="p-4 bg-green-50 border border-fanion-green/30 text-fanion-green text-sm rounded font-semibold text-center">
-              ✓ Mot de passe défini avec succès. Redirection en cours…
+              Mot de passe défini avec succès. Redirection en cours…
             </div>
           ) : (
             <>

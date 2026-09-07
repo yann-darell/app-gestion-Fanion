@@ -205,7 +205,7 @@ export const ClassFinancialReportPage: React.FC<ClassFinancialReportPageProps> =
           >
             {schoolYears.map((y) => (
               <option key={y.id} value={y.id}>
-                {y.label} {y.is_active ? "★ (En cours)" : ""}
+                {y.label} {y.is_active ? "(En cours)" : ""}
               </option>
             ))}
           </select>

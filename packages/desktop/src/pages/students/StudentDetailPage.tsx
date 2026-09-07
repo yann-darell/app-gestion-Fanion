@@ -1,3 +1,4 @@
+import { CreditCardIcon, EyeIcon, DownloadIcon, FileTextIcon, CloseIcon } from "../../components/ui/Icons";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -126,7 +127,7 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
               onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
               className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded text-sm font-semibold transition shadow-sm"
             >
-              💳 Enregistrer un paiement
+              <span className="inline-flex items-center gap-1.5"><CreditCardIcon className="w-4 h-4" /> Enregistrer un paiement</span>
             </button>
             <button
               onClick={() => setIsEditModalOpen(true)}
@@ -365,7 +366,7 @@ function StudentPaymentsHistorySection({
                     }}
                     className="px-2.5 py-1.5 bg-white border border-line hover:bg-paper text-ink font-bold rounded text-[11px] transition flex items-center gap-1"
                   >
-                    <span>👁️</span> Voir
+                    <EyeIcon className="w-3.5 h-3.5" /> Voir
                   </button>
                   <button
                     type="button"
@@ -392,7 +393,7 @@ function StudentPaymentsHistorySection({
                     }}
                     className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded text-[11px] transition flex items-center gap-1"
                   >
-                    <span>📥</span> Télécharger
+                    <DownloadIcon className="w-3.5 h-3.5" /> Télécharger
                   </button>
                 </div>
               </div>
@@ -407,13 +408,13 @@ function StudentPaymentsHistorySection({
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-line">
             <div className="p-4 bg-ink text-white flex items-center justify-between">
               <h3 className="font-display font-bold text-sm flex items-center gap-2">
-                <span>📄</span> Aperçu du Reçu Officiel
+                <FileTextIcon className="w-4 h-4" /> Aperçu du Reçu Officiel
               </h3>
               <button
                 onClick={() => setPreviewPdfUrl(null)}
                 className="w-8 h-8 rounded hover:bg-white/20 flex items-center justify-center text-lg font-bold transition"
               >
-                ✕
+                <CloseIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 bg-slate/10 p-2">

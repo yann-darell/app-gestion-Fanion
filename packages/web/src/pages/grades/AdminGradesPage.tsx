@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { CheckIcon } from "../../components/ui/Icons";
 import {
   listClasses,
   listSubjects,
@@ -295,7 +296,7 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
           >
             {sequences.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.label} {s.is_locked ? "🔒 (Verrouillée)" : ""}
+                {s.label} {s.is_locked ? "(Verrouillée)" : ""}
               </option>
             ))}
           </select>
@@ -359,7 +360,7 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
                     {/* Statut de sauvegarde */}
                     <span className="text-[11px] w-24 text-right font-medium">
                       {isSaving && <span className="text-fanion-gold animate-pulse">Enregistrement...</span>}
-                      {isSaved && <span className="text-fanion-green font-bold">✓ Enregistré</span>}
+                      {isSaved && <span className="text-fanion-green font-bold inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Enregistré</span>}
                     </span>
 
                     {/* Champ de saisie numérique */}

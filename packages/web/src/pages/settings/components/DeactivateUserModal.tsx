@@ -1,3 +1,4 @@
+import { AlertTriangleIcon, ZapIcon } from "../../../components/ui/Icons";
 export interface DeactivatableUser {
   full_name: string;
   email?: string | null;
@@ -25,7 +26,7 @@ export const DeactivateUserModal: React.FC<DeactivateUserModalProps> = ({
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-200">
         <div className="flex items-center gap-3 text-rose-600 mb-4">
           <div className="p-2.5 bg-rose-100 rounded-full">
-            <span className="text-xl">⚠️</span>
+            <AlertTriangleIcon className="w-5 h-5 text-rose-600" />
           </div>
           <h3 className="text-lg font-bold text-slate-900">Désactiver cet enseignant ?</h3>
         </div>
@@ -35,7 +36,7 @@ export const DeactivateUserModal: React.FC<DeactivateUserModalProps> = ({
         </p>
 
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 mb-6 font-medium">
-          ⚡ <strong>Attention :</strong> Sa session en cours sera immédiatement interrompue et ses accès au système de saisie seront immédiatement coupés.
+          <span className="inline-flex items-center gap-1 font-bold text-amber-900 mr-1"><ZapIcon className="w-3.5 h-3.5 text-amber-600 fill-amber-500" /> Attention :</span> Sa session en cours sera immédiatement interrompue et ses accès au système de saisie seront immédiatement coupés.
         </div>
 
         <div className="flex items-center justify-end gap-3">

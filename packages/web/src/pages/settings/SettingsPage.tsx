@@ -1,3 +1,4 @@
+import { SchoolIcon, CalendarIcon, SpinnerIcon } from "../../components/ui/Icons";
 import React, { useEffect, useState } from "react";
 import {
   getSchoolSettings,
@@ -56,7 +57,7 @@ export const SettingsPage: React.FC = () => {
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
-          <span>🏫</span> Identité Établissement
+          <SchoolIcon className="w-4 h-4 text-indigo-600" /> Identité Établissement
         </button>
 
         <button
@@ -67,14 +68,14 @@ export const SettingsPage: React.FC = () => {
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
-          <span>📅</span> Calendrier &amp; Séquences
+          <CalendarIcon className="w-4 h-4 text-indigo-600" /> Calendrier &amp; Séquences
         </button>
       </div>
 
       {/* Contenu principal selon statut */}
       {loading ? (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-          <div className="inline-block animate-spin text-2xl mb-2">⏳</div>
+          <div className="flex justify-center mb-2"><SpinnerIcon className="w-8 h-8 text-indigo-600 animate-spin" /></div>
           <p className="text-sm text-slate-500">Chargement des configurations...</p>
         </div>
       ) : error ? (

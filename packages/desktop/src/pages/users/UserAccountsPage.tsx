@@ -1,3 +1,4 @@
+import { CloseIcon } from "../../components/ui/Icons";
 import React, { useState, useEffect } from "react";
 import { inviteTeacher, listUsers, updateUser, deleteUser, UserProfile } from "@fanion/shared";
 
@@ -212,7 +213,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
             onClick={() => setGlobalSuccess(null)}
             className="text-emerald-600 hover:text-emerald-900 font-bold ml-4"
           >
-            ✕
+            <CloseIcon className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -564,7 +565,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                 onClick={() => setEditingUser(null)}
                 className="text-slate hover:text-ink text-lg font-bold"
               >
-                ✕
+                <CloseIcon className="w-5 h-5" />
               </button>
             </div>
 

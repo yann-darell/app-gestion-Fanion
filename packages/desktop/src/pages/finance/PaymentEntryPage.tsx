@@ -1,3 +1,4 @@
+import { CheckIcon, CheckCircleIcon, EyeIcon, DownloadIcon, FileTextIcon, CloseIcon, InfoIcon, AwardIcon } from "../../components/ui/Icons";
 import React, { useEffect, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -543,7 +544,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                     <span className="text-xs text-slate mt-1">
                       {registrationRemaining > 0
                         ? `Reste : ${formatAmount(registrationRemaining)} FCFA`
-                        : "✓ Déjà intégralement réglé"}
+                        : "Déjà intégralement réglé"}
                     </span>
                   </button>
 
@@ -585,13 +586,13 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                   {/* Information préventive sur la ventilation automatique du surplus */}
                   {isRegistrationSurplus && (
                     <div className="p-2.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900 font-medium mt-2">
-                      ℹ️ <strong>{formatAmount(registrationRemaining)} FCFA</strong> vont solder l'inscription et le surplus de <strong>{formatAmount(numAmount - registrationRemaining)} FCFA</strong> sera automatiquement attribué aux frais de scolarité.
+                      <span className="inline-flex items-center gap-1 mr-1"><InfoIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" /></span><strong>{formatAmount(registrationRemaining)} FCFA</strong> vont solder l'inscription et le surplus de <strong>{formatAmount(numAmount - registrationRemaining)} FCFA</strong> sera automatiquement attribué aux frais de scolarité.
                     </div>
                   )}
 
                   {isRegistrationAlreadyPaid && (
                     <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-900 font-medium mt-2">
-                      ℹ️ L'inscription étant déjà intégralement réglée, la totalité des <strong>{formatAmount(numAmount)} FCFA</strong> sera directement versée aux frais de scolarité.
+                      <span className="inline-flex items-center gap-1 mr-1"><InfoIcon className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" /></span>L'inscription étant déjà intégralement réglée, la totalité des <strong>{formatAmount(numAmount)} FCFA</strong> sera directement versée aux frais de scolarité.
                     </div>
                   )}
                 </div>
@@ -646,7 +647,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                             </span>
                           )}
                           {td.isCompleted && (
-                            <span className="text-emerald-700 font-bold">✓ Soldé</span>
+                            <span className="text-emerald-700 font-bold inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Soldé</span>
                           )}
                         </div>
                       </div>
@@ -686,7 +687,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
           <div className="bg-white border border-line rounded-lg max-w-lg w-full p-6 shadow-xl space-y-5">
             <div className="text-center space-y-2 border-b border-line pb-4">
               <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 mx-auto flex items-center justify-center text-xl font-bold">
-                ✓
+                <CheckCircleIcon className="w-7 h-7 text-emerald-700" />
               </div>
               <h3 className="font-display text-xl font-bold text-ink">
                 Paiement Enregistré avec Succès !
@@ -698,7 +699,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
 
             {createdPaymentResult.activatedNow && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded text-xs font-bold text-center">
-                🎉 Félicitations ! L'inscription de cet élève a été intégralement couverte. Son statut a été automatiquement passé à **ACTIF / INSCRIT**.
+                <span className="inline-flex items-center justify-center gap-1.5"><AwardIcon className="w-4 h-4 text-emerald-700 flex-shrink-0" /> Félicitations ! L'inscription de cet élève a été intégralement couverte. Son statut a été automatiquement passé à **ACTIF / INSCRIT**.</span>
               </div>
             )}
 
@@ -748,7 +749,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                 }}
                 className="flex-1 py-2 px-3 bg-white border border-line text-ink font-bold rounded text-xs hover:bg-paper transition flex items-center justify-center gap-1.5"
               >
-                <span>👁️</span> Voir le reçu
+                <EyeIcon className="w-3.5 h-3.5" /> Voir le reçu
               </button>
               <button
                 type="button"
@@ -776,7 +777,7 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                 }}
                 className="flex-1 py-2 px-3 bg-emerald-700 text-white font-bold rounded text-xs hover:bg-emerald-800 transition flex items-center justify-center gap-1.5"
               >
-                <span>📥</span> Télécharger
+                <DownloadIcon className="w-3.5 h-3.5" /> Télécharger
               </button>
             </div>
 
@@ -806,13 +807,13 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-line">
             <div className="p-4 bg-ink text-white flex items-center justify-between">
               <h3 className="font-display font-bold text-sm flex items-center gap-2">
-                <span>📄</span> Prévisualisation du Reçu Officiel
+                <FileTextIcon className="w-4 h-4" /> Prévisualisation du Reçu Officiel
               </h3>
               <button
                 onClick={() => setPreviewPdfUrl(null)}
                 className="w-8 h-8 rounded hover:bg-white/20 flex items-center justify-center text-lg font-bold transition"
               >
-                ✕
+                <CloseIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 bg-slate/10 p-2">

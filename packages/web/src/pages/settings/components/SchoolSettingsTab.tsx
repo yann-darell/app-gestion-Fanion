@@ -1,3 +1,4 @@
+import { SchoolIcon, SaveIcon } from "../../../components/ui/Icons";
 import React, { useState } from "react";
 import { SchoolSettings, updateSchoolSettings } from "@fanion/shared";
 
@@ -37,7 +38,7 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
       <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-        <span>🏫</span> Identité de l'Établissement
+        <SchoolIcon className="w-5 h-5 text-indigo-700" /> Identité de l'Établissement
       </h2>
 
       {toast && (
@@ -153,7 +154,7 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
             disabled={saving}
             className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
           >
-            {saving ? "Enregistrement..." : "💾 Enregistrer l'identité"}
+            {saving ? "Enregistrement..." : <><SaveIcon className="w-4 h-4" /> Enregistrer l'identité</>}
           </button>
         </div>
       </form>

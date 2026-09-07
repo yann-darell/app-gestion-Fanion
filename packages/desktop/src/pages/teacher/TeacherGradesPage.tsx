@@ -1,3 +1,4 @@
+import { LockIcon, CheckIcon, CheckCircleIcon, AlertTriangleIcon } from "../../components/ui/Icons";
 import React, { useState, useEffect } from "react";
 import {
   supabase,
@@ -14,6 +15,12 @@ import {
   GradeRecord,
   useSelectionPersistence,
 } from "@fanion/shared";
+import {
+  getSequenceCompetency,
+  upsertSequenceCompetency,
+  getGradeSubmission,
+  submitClassGrades,
+} from "@fanion/shared/api/grades";
 
 interface TeacherGradesPageProps {
   userRole?: string;
@@ -31,9 +38,23 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
   const [savedStatusMap, setSavedStatusMap] = useState<Record<string, boolean>>({});
 
+  // Compétence évaluée par séquence
+  const [competencyDescription, setCompetencyDescription] = useState<string>("");
+  const [savingCompetency, setSavingCompetency] = useState(false);
+  const [savedCompetency, setSavedCompetency] = useState(false);
+
+  // Verrouillage / Soumission des notes
+  const [isLockedBySubmission, setIsLockedBySubmission] = useState(false);
+  const [submissionDate, setSubmissionDate] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [loadingGrades, setLoadingGrades] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const isTeacher = userRole === "enseignant";
 
   useEffect(() => {
     fetchInitialData();
@@ -53,6 +74,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
         setLoading(false);
         return;
       }
+      setCurrentUserId(user.id);
 
       const assignmentFilters = userRole === "enseignant" ? { teacher_id: user.id } : {};
       const assignmentsData = await listTeacherAssignments(assignmentFilters);
@@ -81,16 +103,40 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   useEffect(() => {
     if (currentAssignment && selectedSequenceId) {
       fetchStudentsAndGrades(currentAssignment.class_id, currentAssignment.subject_id, selectedSequenceId);
+      fetchCompetencyAndSubmission(currentAssignment.class_id, currentAssignment.subject_id, selectedSequenceId);
     } else {
       setStudents([]);
       setGradesMap({});
+      setCompetencyDescription("");
+      setIsLockedBySubmission(false);
     }
   }, [selectedAssignmentId, selectedSequenceId]);
+
+  const fetchCompetencyAndSubmission = async (classId: string, subjectId: string, sequenceId: string) => {
+    try {
+      // 1. Compétence
+      const comp = await getSequenceCompetency(classId, subjectId, sequenceId);
+      setCompetencyDescription(comp ? comp.description : "");
+
+      // 2. Statut de soumission
+      const sub = await getGradeSubmission(classId, subjectId, sequenceId);
+      if (sub && sub.is_locked) {
+        setIsLockedBySubmission(true);
+        setSubmissionDate(sub.submitted_at);
+      } else {
+        setIsLockedBySubmission(false);
+        setSubmissionDate(null);
+      }
+    } catch (err) {
+      console.error("Erreur chargement métadonnées séquence:", err);
+    }
+  };
 
   const fetchStudentsAndGrades = async (classId: string, subjectId: string, sequenceId: string) => {
     try {
       setLoadingGrades(true);
       setError(null);
+      setSuccessMessage(null);
 
       let studentsData: AssignedStudentRecord[];
       if (userRole === "enseignant") {
@@ -125,6 +171,30 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
     }
   };
 
+  // Sauvegarde automatique de la compétence évaluée
+  const handleCompetencyBlur = async () => {
+    if (!currentAssignment || !selectedSequenceId) return;
+    if (isTeacher && isLockedBySubmission) return;
+
+    try {
+      setSavingCompetency(true);
+      await upsertSequenceCompetency(
+        currentAssignment.class_id,
+        currentAssignment.subject_id,
+        selectedSequenceId,
+        competencyDescription,
+        currentUserId || undefined
+      );
+      setSavedCompetency(true);
+      setTimeout(() => setSavedCompetency(false), 2000);
+    } catch (err: any) {
+      console.error("Erreur sauvegarde compétence:", err);
+      setError(err.message || "Erreur lors de la sauvegarde de la compétence.");
+    } finally {
+      setSavingCompetency(false);
+    }
+  };
+
   const handleScoreChange = (studentId: string, valueStr: string) => {
     const val = parseFloat(valueStr);
     if (isNaN(val)) {
@@ -141,6 +211,8 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   };
 
   const handleScoreBlur = async (studentId: string) => {
+    if (isTeacher && isLockedBySubmission) return;
+
     const score = gradesMap[studentId];
     if (score === undefined || isNaN(score)) return;
 
@@ -174,6 +246,59 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
     }
   };
 
+  // Calcul du workflow de validation
+  const totalStudentsCount = students.length;
+  const gradedStudentsCount = students.filter(
+    (s) => gradesMap[s.id] !== undefined && !isNaN(gradesMap[s.id])
+  ).length;
+  const isClassComplete = totalStudentsCount > 0 && gradedStudentsCount === totalStudentsCount;
+
+  // L'écriture est verrouillée si l'enseignant a validé (Direction peut toujours modifier)
+  const isReadOnlyForUser = isTeacher && isLockedBySubmission;
+
+  const handleSubmitClass = async () => {
+    if (!currentAssignment || !selectedSequenceId || !currentUserId) return;
+    if (!isClassComplete) {
+      setError("Toutes les notes de la classe doivent être saisies avant de valider.");
+      return;
+    }
+
+    const confirmMsg = "Êtes-vous sûr de vouloir valider et envoyer les notes de la classe ?\n\nUne fois validées, vos notes seront verrouillées et vous ne pourrez plus les modifier.";
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      // Si la compétence a été saisie, s'assurer qu'elle est enregistrée
+      if (competencyDescription.trim()) {
+        await upsertSequenceCompetency(
+          currentAssignment.class_id,
+          currentAssignment.subject_id,
+          selectedSequenceId,
+          competencyDescription,
+          currentUserId
+        );
+      }
+
+      const res = await submitClassGrades(
+        currentAssignment.class_id,
+        currentAssignment.subject_id,
+        selectedSequenceId,
+        currentUserId
+      );
+
+      setIsLockedBySubmission(true);
+      setSubmissionDate(res.submitted_at);
+      setSuccessMessage("Notes de la classe validées et envoyées avec succès. Écriture désormais verrouillée.");
+    } catch (err: any) {
+      console.error("Erreur validation des notes:", err);
+      setError(err.message || "Erreur lors de la validation des notes.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-12 text-center text-slate font-medium text-sm">
@@ -191,6 +316,23 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
             Saisie au fil de l'eau pour vos classes et matières assignées
           </p>
         </div>
+
+        {/* Indicateur de statut de verrouillage */}
+        {isLockedBySubmission && (
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-fanion-green text-xs font-bold self-start sm:self-auto">
+            <span className="inline-flex items-center gap-1.5"><LockIcon className="w-3.5 h-3.5" /> Notes validées &amp; verrouillées</span>
+            {submissionDate && (
+              <span className="text-[11px] font-normal text-slate">
+                ({new Date(submissionDate).toLocaleDateString("fr-FR")})
+              </span>
+            )}
+            {!isTeacher && (
+              <span className="text-[10px] bg-ink/10 text-ink px-1.5 py-0.5 rounded font-mono ml-1">
+                Mode Direction (Écriture active)
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -199,6 +341,13 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
         </div>
       )}
 
+      {successMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-fanion-green text-xs sm:text-sm rounded font-medium">
+          {successMessage}
+        </div>
+      )}
+
+      {/* Sélecteurs Classe / Matière et Séquence */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-line rounded p-4 shadow-sm">
         <div>
           <label className="block text-xs font-semibold text-slate uppercase mb-1">
@@ -241,6 +390,39 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
         </div>
       </div>
 
+      {/* Bloc Compétence Évaluée intégrée (1 seul champ par matière/classe/séquence) */}
+      {currentAssignment && (
+        <div className="bg-white border border-line rounded p-4 shadow-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-ink uppercase tracking-wide">
+              Compétence évaluée pour cette séquence
+            </label>
+            <span className="text-[11px] font-medium">
+              {savingCompetency && <span className="text-fanion-gold animate-pulse">Enregistrement...</span>}
+              {savedCompetency && <span className="text-fanion-green font-bold inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Enregistrée</span>}
+            </span>
+          </div>
+          <p className="text-xs text-slate">
+            Description de l'activité d'évaluation ou savoir essentiel (apparaîtra sur les bulletins de tous les élèves de la classe).
+          </p>
+          <div className="relative">
+            <input
+              type="text"
+              maxLength={300}
+              disabled={isReadOnlyForUser}
+              value={competencyDescription}
+              onChange={(e) => setCompetencyDescription(e.target.value)}
+              onBlur={handleCompetencyBlur}
+              placeholder="Ex: Résoudre des équations du premier degré dans des situations de vie courante"
+              className={`w-full px-3 py-2 border border-line rounded text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink ${
+                isReadOnlyForUser ? "bg-slate/5 cursor-not-allowed text-slate" : ""
+              }`}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Grille de saisie des élèves */}
       {loadingGrades ? (
         <div className="py-8 text-center text-slate text-xs sm:text-sm">
           Chargement de la liste des élèves et des notes...
@@ -251,12 +433,19 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
         </div>
       ) : (
         <div className="bg-white border border-line rounded shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-line bg-paper/50 flex justify-between items-center">
-            <span className="text-xs font-bold text-slate uppercase tracking-wider">
-              {students.length} Élève(s) dans la classe
-            </span>
+          <div className="p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold text-slate uppercase tracking-wider">
+                {students.length} Élève(s) dans la classe
+              </span>
+              <span className="ml-3 text-xs font-semibold text-ink">
+                ({gradedStudentsCount}/{totalStudentsCount} note(s) renseignée(s))
+              </span>
+            </div>
             <span className="text-[11px] text-slate italic">
-              Sauvegarde automatique à la sortie du champ
+              {isReadOnlyForUser
+                ? "Saisie verrouillée après validation"
+                : "Sauvegarde automatique à la sortie du champ"}
             </span>
           </div>
 
@@ -295,7 +484,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
 
                     <span className="text-[11px] w-20 text-right font-medium">
                       {isSaving && <span className="text-fanion-gold animate-pulse">Enregistrement...</span>}
-                      {isSaved && <span className="text-fanion-green font-bold">✓ Enregistré</span>}
+                      {isSaved && <span className="text-fanion-green font-bold inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Enregistré</span>}
                     </span>
 
                     <div className="relative flex items-center">
@@ -304,12 +493,15 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
                         step="0.25"
                         min="0"
                         max="20"
+                        disabled={isReadOnlyForUser}
                         inputMode="decimal"
                         value={score !== undefined ? score : ""}
                         onChange={(e) => handleScoreChange(student.id, e.target.value)}
                         onBlur={() => handleScoreBlur(student.id)}
                         placeholder="/ 20"
-                        className="w-24 px-3 py-2 border border-line rounded text-right font-mono font-bold text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink"
+                        className={`w-24 px-3 py-2 border border-line rounded text-right font-mono font-bold text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink ${
+                          isReadOnlyForUser ? "bg-slate/5 cursor-not-allowed text-slate" : ""
+                        }`}
                       />
                       <span className="ml-1 text-xs text-slate font-mono font-semibold">/20</span>
                     </div>
@@ -317,6 +509,41 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
                 </div>
               );
             })}
+          </div>
+
+          {/* Barre d'action de validation globale de la classe */}
+          <div className="p-4 border-t border-line bg-paper/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-xs text-slate">
+              {!isClassComplete ? (
+                <span className="text-signal-red font-medium">
+                  <span className="inline-flex items-center gap-1.5"><AlertTriangleIcon className="w-4 h-4 text-signal-red flex-shrink-0" /> Toutes les notes doivent être remplies ({gradedStudentsCount}/{totalStudentsCount}) pour pouvoir valider la classe.</span>
+                </span>
+              ) : isLockedBySubmission ? (
+                <span className="text-fanion-green font-medium">
+                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" /> Toutes les notes ont été validées et transmises à la Direction.</span>
+                </span>
+              ) : (
+                <span className="text-slate font-medium">
+                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-slate flex-shrink-0" /> Toutes les notes sont saisies. Vous pouvez maintenant valider et envoyer les notes.</span>
+                </span>
+              )}
+            </div>
+
+            {(!isLockedBySubmission || !isTeacher) && (
+              <button
+                type="button"
+                id="btn-validate-class-grades"
+                disabled={!isClassComplete || submitting || isReadOnlyForUser}
+                onClick={handleSubmitClass}
+                className={`px-5 py-2.5 rounded text-sm font-bold shadow-sm transition-all flex items-center gap-2 ${
+                  isClassComplete && !isReadOnlyForUser
+                    ? "bg-fanion-green hover:bg-emerald-700 text-white cursor-pointer"
+                    : "bg-slate/20 text-slate/60 cursor-not-allowed"
+                }`}
+              >
+                {submitting ? "Validation en cours..." : "Valider et envoyer les notes de la classe"}
+              </button>
+            )}
           </div>
         </div>
       )}

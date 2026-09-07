@@ -24,6 +24,26 @@ export interface UpsertGradeInput {
   score: number;
 }
 
+export interface SequenceCompetencyRecord {
+  id: string;
+  class_id: string;
+  subject_id: string;
+  sequence_id: string;
+  description: string;
+  updated_by?: string | null;
+  updated_at: string;
+}
+
+export interface GradeSubmissionRecord {
+  id: string;
+  class_id: string;
+  subject_id: string;
+  sequence_id: string;
+  teacher_id: string;
+  submitted_at: string;
+  is_locked: boolean;
+}
+
 /**
  * Récupère la liste des notes en fonction des filtres spécifiés.
  */
@@ -97,4 +117,113 @@ export async function upsertGrade(input: UpsertGradeInput): Promise<GradeRecord>
 export async function deleteGrade(id: string): Promise<void> {
   const { error } = await supabase.from("grades").delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Récupère la compétence évaluée pour une classe, une matière et une séquence.
+ */
+export async function getSequenceCompetency(
+  classId: string,
+  subjectId: string,
+  sequenceId: string
+): Promise<SequenceCompetencyRecord | null> {
+  const { data, error } = await supabase
+    .from("sequence_competencies")
+    .select("*")
+    .eq("class_id", classId)
+    .eq("subject_id", subjectId)
+    .eq("sequence_id", sequenceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erreur lecture compétence séquence:", error);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Enregistre ou met à jour la compétence évaluée pour une classe/matière/séquence.
+ */
+export async function upsertSequenceCompetency(
+  classId: string,
+  subjectId: string,
+  sequenceId: string,
+  description: string,
+  userId?: string
+): Promise<SequenceCompetencyRecord> {
+  const { data, error } = await supabase
+    .from("sequence_competencies")
+    .upsert(
+      {
+        class_id: classId,
+        subject_id: subjectId,
+        sequence_id: sequenceId,
+        description: description.trim(),
+        updated_by: userId || null,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "class_id,subject_id,sequence_id",
+      }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Vérifie l'état de soumission/verrouillage des notes pour une classe/matière/séquence.
+ */
+export async function getGradeSubmission(
+  classId: string,
+  subjectId: string,
+  sequenceId: string
+): Promise<GradeSubmissionRecord | null> {
+  const { data, error } = await supabase
+    .from("grade_submissions")
+    .select("*")
+    .eq("class_id", classId)
+    .eq("subject_id", subjectId)
+    .eq("sequence_id", sequenceId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Erreur statut soumission notes:", error);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Valide et verrouille les notes de la classe par l'enseignant.
+ */
+export async function submitClassGrades(
+  classId: string,
+  subjectId: string,
+  sequenceId: string,
+  teacherId: string
+): Promise<GradeSubmissionRecord> {
+  const { data, error } = await supabase
+    .from("grade_submissions")
+    .upsert(
+      {
+        class_id: classId,
+        subject_id: subjectId,
+        sequence_id: sequenceId,
+        teacher_id: teacherId,
+        is_locked: true,
+        submitted_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "class_id,subject_id,sequence_id",
+      }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }

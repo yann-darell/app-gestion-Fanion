@@ -1,3 +1,4 @@
+import { CheckCircleIcon, CheckIcon, AlertTriangleIcon } from "../../components/ui/Icons";
 import React, { useEffect, useState, useCallback } from "react";
 import {
   listClasses,
@@ -292,7 +293,7 @@ export const FeeSchedulePage: React.FC<FeeSchedulePageProps> = ({ userRole }) =>
 
       {successMsg && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-800 font-semibold flex items-center gap-2">
-          <span>✓</span> {successMsg}
+          <CheckIcon className="w-4 h-4 inline-block mr-1" /> {successMsg}
         </div>
       )}
 
@@ -468,13 +469,13 @@ export const FeeSchedulePage: React.FC<FeeSchedulePageProps> = ({ userRole }) =>
             {/* Bannière de calcul et d'écart */}
             {diffAmount === 0 ? (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-900 font-semibold flex items-center justify-between">
-                <span>🟢 Échéancier équilibré : La somme des tranches correspond exactement à la scolarité totale.</span>
+                <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" /> Échéancier équilibré : La somme des tranches correspond exactement à la scolarité totale.</span>
                 <span className="font-mono">{formatAmount(sumInstallments)} FCFA</span>
               </div>
             ) : (
               <div className="p-3 bg-amber-50 border border-amber-300 rounded text-xs text-amber-900 font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                 <span>
-                  ⚠️ Attention : La somme des tranches ({formatAmount(sumInstallments)} FCFA) diffère de la scolarité
+                  <span className="inline-flex items-center gap-1.5"><AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0" /> Attention : La somme des tranches</span> ({formatAmount(sumInstallments)} FCFA) diffère de la scolarité
                   totale ({formatAmount(totalAmount)} FCFA).
                 </span>
                 <span className="font-mono text-amber-950 font-bold whitespace-nowrap">
@@ -506,7 +507,7 @@ export const FeeSchedulePage: React.FC<FeeSchedulePageProps> = ({ userRole }) =>
           <div className="bg-white border border-line rounded-t-2xl sm:rounded-lg w-full sm:max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-y-auto">
             {/* Header fixe */}
             <div className="flex items-center gap-3 p-6 pb-4 border-b border-line">
-              <span className="text-2xl flex-shrink-0">⚠️</span>
+              <div className="p-2 bg-amber-100 rounded-full flex-shrink-0"><AlertTriangleIcon className="w-6 h-6 text-amber-600" /></div>
               <h3 className="font-display font-bold text-lg text-ink">Écart de montant détecté</h3>
             </div>
 

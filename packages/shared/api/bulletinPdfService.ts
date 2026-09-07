@@ -166,6 +166,30 @@ export async function createStudentBulletinPdfBuffer(
   const className = (student.classes?.name || "").toUpperCase();
   const isFirstCycleCompetence = className.includes("6") || className.includes("5") || className.includes("SIXIEME") || className.includes("CINQUIEME");
 
+  // Charger les compétences évaluées pour la classe et la période si applicable
+  const competenciesBySubject: Record<string, string> = {};
+  if (isFirstCycleCompetence) {
+    try {
+      let compQuery = supabase
+        .from("sequence_competencies")
+        .select("subject_id, description")
+        .eq("class_id", classId);
+
+      if (periodType === "sequence") {
+        compQuery = compQuery.eq("sequence_id", periodId);
+      }
+
+      const { data: compData } = await compQuery;
+      if (compData) {
+        compData.forEach((c: { subject_id: string; description: string }) => {
+          competenciesBySubject[c.subject_id] = c.description;
+        });
+      }
+    } catch (cErr) {
+      console.warn("Avertissement: Impossible de charger les compétences évaluées:", cErr);
+    }
+  }
+
   // Filigrane Sécurisé (Zone restreinte : de la 4ème ligne du Groupe I au bas du bloc Saumon)
   // Sera dessiné dynamiquement pendant le tracé du tableau
 
@@ -463,8 +487,9 @@ export async function createStudentBulletinPdfBuffer(
       let cIdx = 1;
 
       if (isFirstCycleCompetence) {
-        // Colonne Compétences Évaluées
-        page.drawText("Maîtriser les savoirs essentiels", { x: rX + 2, y: tableY - 10, size: 5.5, font: fontRegular });
+        // Colonne Compétences Évaluées (texte réel issu de sequence_competencies)
+        const compText = competenciesBySubject[c.subject_id] || "Maîtriser les savoirs essentiels";
+        page.drawText(compText.substring(0, 32), { x: rX + 2, y: tableY - 10, size: 5, font: fontRegular });
         rX += colWidths[cIdx++];
       }
 
