@@ -43,6 +43,8 @@ export interface TermRecord {
   school_year_id: string;
   label: string;
   order_index: number;
+  start_date?: string | null;
+  end_date?: string | null;
   created_at: string;
 }
 
@@ -51,6 +53,9 @@ export interface SequenceRecord {
   term_id: string;
   label: string;
   order_index: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  is_locked?: boolean;
   created_at: string;
 }
 

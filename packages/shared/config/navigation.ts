@@ -103,6 +103,13 @@ export const NAVIGATION_ITEMS: NavItemConfig[] = [
     category: "Finance",
     allowedRoles: ["principal", "directeur_etudes"],
   },
+  {
+    id: "finance-class-report",
+    to: "/finance/class-report",
+    label: "Fiche paiement classe",
+    category: "Finance",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
 
   // --- Espace Enseignant ---
   {

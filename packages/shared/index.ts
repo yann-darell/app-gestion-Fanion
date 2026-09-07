@@ -11,6 +11,8 @@ export * from "./api/grades";
 export * from "./api/bulletinPdfService";
 export * from "./api/receiptPdfService";
 export * from "./api/financeService";
+export * from "./api/financialReportService";
+export * from "./api/classFinancialReportPdfService";
 export * from "./services/classReportService";
 export * from "./services/settingsService";
 export * from "./config/navigation";

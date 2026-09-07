@@ -18,6 +18,8 @@ import BulletinsPdfPage from "./pages/reports/BulletinsPdfPage";
 import ClassReportPage from "./pages/reports/ClassReportPage";
 import FeeSchedulePage from "./pages/finance/FeeSchedulePage";
 import PaymentEntryPage from "./pages/finance/PaymentEntryPage";
+import ClassFinancialReportPage from "./pages/finance/ClassFinancialReportPage";
+import AdminGradesPage from "./pages/grades/AdminGradesPage";
 import { SettingsPage } from "../../web/src/pages/settings/SettingsPage";
 
 type Profile = {
@@ -444,14 +446,16 @@ export default function App() {
             
             <Route path="finance/fee-schedule" element={<FeeSchedulePage userRole={profile?.role} />} />
             <Route path="finance/payments" element={<PaymentEntryPage userRole={profile?.role} />} />
+            <Route path="finance/class-report" element={<ClassFinancialReportPage userRole={profile?.role} />} />
             <Route path="users" element={<UserAccountsPage userRole={profile?.role} />} />
 
             {/* ── Routes Enseignant D3 ── */}
             <Route path="teacher/grades" element={<TeacherGradesPage userRole={profile?.role} />} />
             <Route path="teacher/evolution" element={<TeacherEvolutionPage userRole={profile?.role} />} />
 
-            <Route path="grades" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Bulletins &amp; Notes</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
-            <Route path="finance" element={<div className="p-6"><h2 className="text-2xl font-bold font-display">Finance &amp; Scolarité</h2><p className="text-slate mt-2">Module en cours de migration...</p></div>} />
+            {/* ── Saisie des notes Direction (Bloc B) ── */}
+            <Route path="grades" element={<AdminGradesPage userRole={profile?.role} />} />
+            <Route path="finance" element={<Navigate to="/finance/class-report" replace />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
