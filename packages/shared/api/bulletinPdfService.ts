@@ -1,10 +1,11 @@
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
 import { supabase } from "./supabaseClient";
 import { generateClassReport } from "../services/classReportService";
 import { getAppreciationCode } from "./gradeCalculations";
 import { listCoefficients, listSubjectGroups } from "./subjects";
 import { listAssignments } from "./teacherAssignments";
 import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
+import { getSchoolSettings, SchoolSettings } from "../services/settingsService";
 
 export interface GenerateBulletinOptions {
   studentId: string;
@@ -82,6 +83,9 @@ export async function createStudentBulletinPdfBuffer(
     .single();
 
   if (studErr || !student) throw new Error("Élève non trouvé pour la génération du bulletin.");
+
+  // Récupérer les paramètres de l'établissement (entete dynamique)
+  const settings: SchoolSettings = await getSchoolSettings();
 
   const classId = student.class_id;
 
@@ -162,33 +166,38 @@ export async function createStudentBulletinPdfBuffer(
     }
   }
 
-  // Détection du premier cycle (6ème et 5ème) pour la variante 9 colonnes (avec compétences)
-  const className = (student.classes?.name || "").toUpperCase();
-  const isFirstCycleCompetence = className.includes("6") || className.includes("5") || className.includes("SIXIEME") || className.includes("CINQUIEME");
-
-  // Charger les compétences évaluées pour la classe et la période si applicable
+  // Charger les compétences évaluées pour la classe et la période (généralisé à TOUTES les classes)
   const competenciesBySubject: Record<string, string> = {};
-  if (isFirstCycleCompetence) {
-    try {
-      let compQuery = supabase
-        .from("sequence_competencies")
-        .select("subject_id, description")
-        .eq("class_id", classId);
+  try {
+    let compQuery = supabase
+      .from("sequence_competencies")
+      .select("subject_id, description")
+      .eq("class_id", classId);
 
-      if (periodType === "sequence") {
-        compQuery = compQuery.eq("sequence_id", periodId);
-      }
-
-      const { data: compData } = await compQuery;
-      if (compData) {
-        compData.forEach((c: { subject_id: string; description: string }) => {
-          competenciesBySubject[c.subject_id] = c.description;
-        });
-      }
-    } catch (cErr) {
-      console.warn("Avertissement: Impossible de charger les compétences évaluées:", cErr);
+    if (periodType === "sequence") {
+      compQuery = compQuery.eq("sequence_id", periodId);
     }
+
+    const { data: compData } = await compQuery;
+    if (compData) {
+      compData.forEach((c: { subject_id: string; description: string }) => {
+        competenciesBySubject[c.subject_id] = c.description;
+      });
+    }
+  } catch (cErr) {
+    console.warn("Avertissement: Impossible de charger les compétences évaluées:", cErr);
   }
+
+  // Filigrane diagonal "CONFIDENTIEL" (fond de page, sous tout le contenu)
+  page.drawText("CONFIDENTIEL", {
+    x: width / 2 - 110,
+    y: height / 2 - 18,
+    size: 52,
+    font: fontBold,
+    color: rgb(0.88, 0.88, 0.9),
+    rotate: degrees(45),
+    opacity: 0.15,
+  });
 
   // Filigrane Sécurisé (Zone restreinte : de la 4ème ligne du Groupe I au bas du bloc Saumon)
   // Sera dessiné dynamiquement pendant le tracé du tableau
@@ -209,8 +218,11 @@ export async function createStudentBulletinPdfBuffer(
   // Pointillés 2 (sous Ministère)
   page.drawText("- - - - - - - - - - - - - - - - - - - - -", { x: 28, y: headerTopY - 31, size: 6, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
 
-  page.drawText("COLLÈGE PRIVÉ LE FANION", { x: 38, y: headerTopY - 40, size: 7.5, font: fontBold });
-  page.drawText("Tel : 696 81 07 22 / 690 54 95 99", { x: 30, y: headerTopY - 50, size: 6.5, font: fontRegular });
+  page.drawText(settings.name.toUpperCase() || "COLLEGE PRIVE LE FANION", { x: 38, y: headerTopY - 40, size: 7.5, font: fontBold });
+  const contactLine = [settings.phone ? `Tel : ${settings.phone}` : null, settings.address || null].filter(Boolean).join(" / ");
+  if (contactLine) {
+    page.drawText(contactLine.substring(0, 45), { x: 30, y: headerTopY - 50, size: 6.5, font: fontRegular });
+  }
   // Pointillés 3 (sous Téléphone)
   page.drawText("- - - - - - - - - - - - - - - - - - - - -", { x: 28, y: headerTopY - 56, size: 6, font: fontRegular, color: rgb(0.3, 0.3, 0.3) });
 
@@ -360,15 +372,19 @@ export async function createStudentBulletinPdfBuffer(
   // ==========================================
   let tableY = idBoxY - 15;
 
-  // Calcul des largeurs de colonnes
-  // 9 colonnes (6e/5e) vs 8 colonnes (autres)
-  const colWidths = isFirstCycleCompetence
-    ? [125, 110, 35, 30, 35, 45, 45, 40, 90] // Total: 555
-    : [180, 45, 35, 45, 55, 55, 45, 95];    // Total: 555
-
-  const headers = isFirstCycleCompetence
-    ? ["MATIÈRES", "COMPÉTENCES ÉVALUÉES", "TRIM", "SEQ", "COEF", "MOY × COEF", "MOY DE CLASSE", "RANG", "APPRÉCIATION"]
-    : ["MATIÈRES", "TRIM", "SEQ", "COEF", "MOY × COEF", "MOY DE CLASSE", "RANG", "APPRÉCIATION"];
+  // Variante 9 colonnes généralisée à TOUTES les classes (avec Compétences Évaluées)
+  const colWidths = [125, 110, 35, 30, 35, 45, 45, 40, 90]; // Total: 555 pt
+  const headers = [
+    "MATIÈRES",
+    "COMPÉTENCES ÉVALUÉES",
+    "TRIM",
+    "SEQ",
+    "COEF",
+    "MOY × COEF",
+    "MOY DE CLASSE",
+    "RANG",
+    "APPRÉCIATION",
+  ];
 
   // Dessiner l'en-tête du tableau (fond transparent pour filigrane)
   page.drawRectangle({
@@ -486,12 +502,10 @@ export async function createStudentBulletinPdfBuffer(
       let rX = marginX + colWidths[0];
       let cIdx = 1;
 
-      if (isFirstCycleCompetence) {
-        // Colonne Compétences Évaluées (texte réel issu de sequence_competencies)
-        const compText = competenciesBySubject[c.subject_id] || "Maîtriser les savoirs essentiels";
-        page.drawText(compText.substring(0, 32), { x: rX + 2, y: tableY - 10, size: 5, font: fontRegular });
-        rX += colWidths[cIdx++];
-      }
+      // Colonne Compétences Évaluées (texte réel issu de sequence_competencies)
+      const compText = competenciesBySubject[c.subject_id] || "Maîtriser les savoirs essentiels";
+      page.drawText(compText.substring(0, 32), { x: rX + 2, y: tableY - 10, size: 5, font: fontRegular });
+      rX += colWidths[cIdx++];
 
       // TRIM (Optionnel / vide en séquence)
       page.drawText(periodType === "term" ? displayScore : "--", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
@@ -818,13 +832,22 @@ export async function createStudentBulletinPdfBuffer(
   }
 
   // ==========================================
-  // 8. NOTE LÉGALE DE BAS DE PAGE
+  // 8. LÉGENDE DES APPRÉCIATIONS & NOTE LÉGALE
   // ==========================================
+  const legendeText = "CNA (<10) | CMA (10-11,99) | CA (12-13,99) | CBA (14-15,99) | CTBA (16-20)";
+  page.drawText(legendeText, {
+    x: width / 2 - 165,
+    y: 19,
+    size: 5.5,
+    font: fontRegular,
+    color: rgb(0.25, 0.25, 0.25),
+  });
+
   const nbText = "NB : Les élèves ont un délai de 15 jours pour toutes revendications dès réception du bulletin.";
   page.drawText(nbText, {
     x: width / 2 - 180,
-    y: 12,
-    size: 7,
+    y: 10,
+    size: 6.5,
     font: fontBold,
   });
 
@@ -989,3 +1012,50 @@ export async function fetchClassBulletinsStatus(
 
   return statusMap;
 }
+
+/**
+ * Génère un document PDF unique combinant tous les bulletins des élèves d'une classe
+ * pour une période donnée (téléchargement groupé).
+ */
+export async function generateClassCombinedBulletinsPdfBuffer(
+  classId: string,
+  periodType: "sequence" | "term",
+  periodId: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<Uint8Array> {
+  const { data: students, error: studErr } = await supabase
+    .from("students")
+    .select("id, last_name, first_name")
+    .eq("class_id", classId)
+    .eq("status", "active")
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+
+  if (studErr || !students || students.length === 0) {
+    throw new Error("Aucun élève actif trouvé dans cette classe pour la génération groupée.");
+  }
+
+  const mergedPdf = await PDFDocument.create();
+  const total = students.length;
+
+  for (let i = 0; i < total; i++) {
+    const student = students[i];
+    if (onProgress) onProgress(i + 1, total);
+
+    try {
+      const studentPdfBytes = await createStudentBulletinPdfBuffer(student.id, periodId, periodType);
+      const studentPdf = await PDFDocument.load(studentPdfBytes);
+      const copiedPages = await mergedPdf.copyPages(studentPdf, studentPdf.getPageIndices());
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+    } catch (err) {
+      console.warn(`Avertissement: Impossible d'inclure le bulletin de ${student.last_name}:`, err);
+    }
+  }
+
+  if (mergedPdf.getPageCount() === 0) {
+    throw new Error("Aucun bulletin n'a pu être généré pour cette classe.");
+  }
+
+  return await mergedPdf.save();
+}
+
