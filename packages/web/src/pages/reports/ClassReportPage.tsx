@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   listClasses,
   listTerms,
@@ -7,18 +7,22 @@ import {
   TermRecord,
   SequenceRecord,
   useSelectionPersistence,
+  generateClassReportPdf,
 } from "@fanion/shared";
 import {
   generateClassReport,
   ClassReportData,
 } from "@fanion/shared/services/classReportService";
 import {
-  PieChart,
-  Pie,
-  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
+  Cell,
+  LabelList,
 } from "recharts";
 
 interface ClassReportPageProps {
@@ -103,6 +107,80 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     }
   }, [selectedClassId, selectedPeriodId, loadReport]);
 
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPdf = async () => {
+    if (!reportData) return;
+    setExportingPdf(true);
+    setError(null);
+    try {
+      const clsName = classes.find((c) => c.id === selectedClassId)?.name || "Classe";
+      const pLabel =
+        periodType === "sequence"
+          ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+          : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
+
+      // Tentative de capture du graphique SVG Recharts en PNG via Canvas
+      let chartImageBase64: string | null = null;
+      try {
+        const svgEl = chartContainerRef.current?.querySelector("svg");
+        if (svgEl) {
+          const svgData = new XMLSerializer().serializeToString(svgEl);
+          const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+          const url = URL.createObjectURL(svgBlob);
+          const img = new Image();
+
+          await new Promise<void>((resolve) => {
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = svgEl.clientWidth || 300;
+              canvas.height = svgEl.clientHeight || 200;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                chartImageBase64 = canvas.toDataURL("image/png");
+              }
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            img.src = url;
+          });
+        }
+      } catch (cErr) {
+        console.warn("Capture image Recharts non disponible, utilisation du tracé natif:", cErr);
+      }
+
+      const pdfBytes = await generateClassReportPdf({
+        reportData,
+        className: clsName,
+        periodLabel: pLabel,
+        chartImageBase64,
+      });
+
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `Bordereau_${clsName.replace(/\s+/g, "_")}_${pLabel.replace(/\s+/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error("Erreur téléchargement bordereau PDF:", err);
+      setError(err?.message || "Erreur lors de la génération du bordereau PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   if (!isAuthorized) {
     return (
       <div className="p-6">
@@ -116,9 +194,25 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink">Bordereau de Classe</h1>
-        <p className="text-xs text-slate mt-1">Vue récapitulative des notes, moyennes et classement de la classe.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink">Bordereau de Classe</h1>
+          <p className="text-xs text-slate mt-1">Vue récapitulative des notes, moyennes et classement de la classe.</p>
+        </div>
+
+        {reportData && reportData.rows.length > 0 && (
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition shadow-sm disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>{exportingPdf ? "Génération du PDF…" : "Télécharger le bordereau PDF"}</span>
+          </button>
+        )}
       </div>
 
       {/* Barre de Filtres */}
@@ -301,42 +395,50 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
             </div>
           </div>
 
-          {/* Graphique Distribution — Donut (Point 4) */}
-          <div className="bg-white border border-line rounded p-4 shadow-sm">
+          {/* Graphique Distribution — Barres (distribution par tranche) */}
+          <div ref={chartContainerRef} className="bg-white border border-line rounded p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-ink font-display mb-3">Distribution des Moyennes par Tranche</h3>
             <div className="h-52 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={reportData.distribution.filter(d => d.count > 0)}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius="52%"
-                    outerRadius="75%"
-                    paddingAngle={3}
-                    dataKey="count"
-                    nameKey="range"
-                    label={(props: any) =>
-                      props.count > 0
-                        ? `${props.range} · ${props.count} (${((props.percent || 0) * 100).toFixed(0)}%)`
-                        : ""
-                    }
-                    labelLine={true}
-                  >
-                    {reportData.distribution.filter(d => d.count > 0).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} stroke="white" strokeWidth={2} />
-                    ))}
-                  </Pie>
+                <BarChart
+                  data={reportData.distribution}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 5 }}
+                  barCategoryGap="30%"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E4E0D6" vertical={false} />
+                  <XAxis
+                    dataKey="range"
+                    tick={{ fontSize: 9, fill: "#5B6B82" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: "#5B6B82" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={24}
+                  />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "#FFFFFF", borderColor: "#E4E0D6", borderRadius: "4px", fontSize: "12px" }}
-                    formatter={(value: any, name: any) => [`${value} élève(s)`, name]}
+                    contentStyle={{ backgroundColor: "#FFFFFF", borderColor: "#E4E0D6", borderRadius: "4px", fontSize: "11px" }}
+                    formatter={(value: any, name: any, props: any) => [
+                      `${value} élève(s)`,
+                      props.payload?.label || name,
+                    ]}
+                    labelFormatter={(label) => `Tranche : ${label}`}
                   />
-                  <Legend
-                    iconType="circle"
-                    iconSize={8}
-                    formatter={(value) => <span style={{ fontSize: "10px", color: "#5B6B82" }}>{value}</span>}
-                  />
-                </PieChart>
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {reportData.distribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                    <LabelList
+                      dataKey="count"
+                      position="top"
+                      style={{ fontSize: "10px", fontWeight: 700, fill: "#150A5E" }}
+                      formatter={(v: number) => (v > 0 ? v : "")}
+                    />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
