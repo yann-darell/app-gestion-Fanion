@@ -15,6 +15,7 @@ import {
   StudentBulletinStatus,
   BulletinCompletenessDiagnostic,
   useSelectionPersistence,
+  generateClassCombinedBulletinsPdfBuffer,
 } from "@fanion/shared";
 
 interface BulletinsPdfPageProps {
@@ -229,6 +230,47 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
   };
 
+  // Action Téléchargement Groupé de tous les bulletins de la classe en un seul PDF
+  const [downloadingBatch, setDownloadingBatch] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleBatchDownloadClassBulletins = async () => {
+    if (!selectedClassId || !selectedPeriodId) return;
+    setDownloadingBatch(true);
+    setBatchProgress(null);
+    setError(null);
+    try {
+      const clsName = classes.find((c) => c.id === selectedClassId)?.name || "Classe";
+      const pLabel =
+        periodType === "sequence"
+          ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+          : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
+
+      const pdfBytes = await generateClassCombinedBulletinsPdfBuffer(
+        selectedClassId,
+        periodType,
+        selectedPeriodId,
+        (current, total) => setBatchProgress({ current, total })
+      );
+
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `Bulletins_Complets_${clsName.replace(/\s+/g, "_")}_${pLabel.replace(/\s+/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error("Erreur téléchargement groupé des bulletins:", err);
+      setError(err?.message || "Échec du téléchargement groupé des bulletins.");
+    } finally {
+      setDownloadingBatch(false);
+      setBatchProgress(null);
+    }
+  };
+
   if (!isAuthorized) {
     return (
       <div className="p-6">
@@ -242,11 +284,33 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink">Bulletins de classe</h1>
-        <p className="text-xs text-slate mt-1">
-          Gestion et suivi individuel de la génération des bulletins officiels par classe et période.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink">Bulletins de classe</h1>
+          <p className="text-xs text-slate mt-1">
+            Gestion et suivi individuel de la génération des bulletins officiels par classe et période.
+          </p>
+        </div>
+
+        {students.length > 0 && (
+          <button
+            type="button"
+            onClick={handleBatchDownloadClassBulletins}
+            disabled={downloadingBatch}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 text-white rounded text-xs font-semibold hover:bg-emerald-800 transition shadow-sm disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>
+              {downloadingBatch
+                ? batchProgress
+                  ? `Génération groupée (${batchProgress.current}/${batchProgress.total})…`
+                  : "Préparation du PDF groupé…"
+                : "Télécharger tous les bulletins (PDF)"}
+            </span>
+          </button>
+        )}
       </div>
 
       {error && (
