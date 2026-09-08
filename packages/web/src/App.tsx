@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "rea
 import { supabase, isRouteAllowedForRole } from "@fanion/shared";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
+import BottomNav from "./components/layout/BottomNav";
 import ClassesPage from "./pages/classes/ClassesPage";
 import StudentsPage from "./pages/students/StudentsPage";
 import StudentDetailPage from "./pages/students/StudentDetailPage";
@@ -429,7 +430,7 @@ export default function App() {
           <main 
             ref={mainRef}
             onScroll={handleMainScroll}
-            className="flex-1 overflow-y-auto custom-scrollbar"
+            className={`flex-1 overflow-y-auto custom-scrollbar ${profile?.role === "enseignant" ? "pb-20 md:pb-0" : ""}`}
           >
             {loadingProfile ? (
               <div className="py-12 text-center text-slate font-medium text-sm">Chargement du profil…</div>
@@ -437,6 +438,7 @@ export default function App() {
               <Outlet />
             )}
           </main>
+          <BottomNav userRole={profile?.role} />
         </div>
       </div>
     );

@@ -242,50 +242,50 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       ) : (
         <>
           {/* Graphique en Ligne des Moyennes */}
-          <div className="bg-white border border-line rounded p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
+          <div className="bg-white border border-line rounded p-3 sm:p-6 shadow-sm space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
+              <h3 className="text-xs sm:text-sm font-bold text-ink uppercase tracking-wide">
                 Moyenne de la classe dans votre matière (sur 20)
               </h3>
               {currentAssignment && (
-                <span className="text-xs font-semibold text-slate bg-paper px-2.5 py-1 rounded border border-line">
+                <span className="text-[11px] sm:text-xs font-semibold text-slate bg-paper px-2 py-0.5 sm:px-2.5 sm:py-1 rounded border border-line self-start sm:self-auto">
                   {currentAssignment.class_name} — {currentAssignment.subject_name}
                 </span>
               )}
             </div>
 
-            <div className="h-72 w-full pt-4">
+            <div className="h-56 sm:h-72 w-full pt-2 sm:pt-4 -ml-2 sm:ml-0">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={evolutionData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E4E0D6" />
-                  <XAxis dataKey="sequenceLabel" stroke="#5B6B82" fontSize={12} />
-                  <YAxis domain={[0, 20]} stroke="#5B6B82" fontSize={12} />
+                  <XAxis dataKey="sequenceLabel" stroke="#5B6B82" fontSize={11} tickLine={false} />
+                  <YAxis domain={[0, 20]} stroke="#5B6B82" fontSize={11} tickCount={5} />
                   <Tooltip
                     formatter={(val: any) => [`${val} / 20`, "Moyenne Matière"]}
-                    contentStyle={{ backgroundColor: "#FAF9F5", borderColor: "#E4E0D6", borderRadius: "4px" }}
+                    contentStyle={{ backgroundColor: "#FAF9F5", borderColor: "#E4E0D6", borderRadius: "4px", fontSize: "12px" }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
                   <Line
                     type="monotone"
                     dataKey="averageScore"
                     name="Moyenne Matière"
                     stroke="#150A5E"
-                    strokeWidth={3}
-                    activeDot={{ r: 8 }}
+                    strokeWidth={2.5}
+                    activeDot={{ r: 6 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Tableau "Bordereau de matière" (8 colonnes : N°, Matricule, Nom, Séquence 1 à 6) */}
+          {/* Section Bordereau de matière : Cartes empilées sur mobile, Tableau sur Desktop */}
           <div className="bg-white border border-line rounded shadow-sm overflow-hidden space-y-2">
-            <div className="p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="p-3 sm:p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
               <div>
-                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
+                <h3 className="text-xs sm:text-sm font-bold text-ink uppercase tracking-wide">
                   Bordereau de matière : {currentAssignment?.subject_name}
                 </h3>
-                <p className="text-xs text-slate mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate mt-0.5">
                   Récapitulatif des notes des {reportRows.length} élève(s) de {currentAssignment?.class_name} sur les 6 séquences
                 </p>
               </div>
@@ -296,62 +296,182 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
                 Aucun élève trouvé dans cette classe.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-paper border-b border-line text-slate font-bold uppercase tracking-wider">
-                      <th className="py-2.5 px-3 w-10 text-center">N°</th>
-                      <th className="py-2.5 px-3 w-28">Matricule</th>
-                      <th className="py-2.5 px-3">Nom et Prénom</th>
-                      {displaySequences.map((seq, idx) => (
-                        <th key={seq.id} className="py-2.5 px-3 text-center w-20">
-                          Seq {idx + 1}
-                        </th>
-                      ))}
-                      {/* Compléter à 6 colonnes si moins de séquences */}
-                      {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
-                        <th key={`empty-seq-${i}`} className="py-2.5 px-3 text-center w-20 text-slate/40">
-                          Seq {displaySequences.length + i + 1}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {reportRows.map((row, idx) => (
-                      <tr key={row.student.id} className="hover:bg-paper/40 transition-colors">
-                        <td className="py-2 px-3 text-center font-mono text-slate font-bold">
-                          {idx + 1}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-slate">
-                          {row.student.matricule}
-                        </td>
-                        <td className="py-2 px-3 font-semibold text-ink">
-                          {row.student.last_name} {row.student.first_name}
-                        </td>
-                        {displaySequences.map((seq) => {
-                          const score = row.sequenceScores[seq.id];
-                          return (
-                            <td key={seq.id} className="py-2 px-3 text-center font-mono font-bold">
-                              {score !== null && score !== undefined ? (
-                                <span className={score < 10 ? "text-signal-red" : "text-ink"}>
-                                  {score.toFixed(2)}
+              <>
+                {/* 1. VERSION MOBILE (< md) : Liste de cartes empilées sans défilement horizontal */}
+                <div className="block md:hidden divide-y divide-line">
+                  {reportRows.map((row, idx) => {
+                    // Calcul des séquences sous la moyenne (< 10)
+                    const failingCount = displaySequences.filter((seq) => {
+                      const score = row.sequenceScores[seq.id];
+                      return score !== null && score !== undefined && score < 10;
+                    }).length;
+                    const hasMultipleFailures = failingCount >= 2;
+
+                    return (
+                      <div
+                        key={row.student.id}
+                        className={`p-3 transition-colors ${
+                          hasMultipleFailures
+                            ? "border-l-4 border-l-signal-red bg-rose-50/25"
+                            : "hover:bg-paper/30"
+                        }`}
+                      >
+                        {/* En-tête de la carte élève */}
+                        <div className="flex items-start justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-xs font-bold text-slate w-5 flex-shrink-0">
+                              #{idx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-ink truncate leading-tight">
+                                {row.student.last_name} {row.student.first_name}
+                              </h4>
+                              <p className="text-[10px] text-slate font-mono mt-0.5">
+                                {row.student.matricule}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {hasMultipleFailures && (
+                              <span
+                                title={`${failingCount} séquences en dessous de 10/20`}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-signal-red border border-rose-200"
+                              >
+                                {failingCount} sous la moy.
+                              </span>
+                            )}
+                            {row.average !== null ? (
+                              <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold ${
+                                row.average < 10 
+                                  ? "bg-rose-100 text-signal-red" 
+                                  : "bg-[#150A5E]/10 text-[#150A5E]"
+                              }`}>
+                                Moy: {row.average.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate/50 font-mono">
+                                Non classé
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Grille 6 pastilles pour les 6 séquences */}
+                        <div className="grid grid-cols-6 gap-1.5 pt-1">
+                          {displaySequences.map((seq, sIdx) => {
+                            const score = row.sequenceScores[seq.id];
+                            const isFail = score !== null && score !== undefined && score < 10;
+                            return (
+                              <div
+                                key={seq.id}
+                                className={`flex flex-col items-center justify-center p-1 rounded border text-center ${
+                                  score !== null && score !== undefined
+                                    ? isFail
+                                      ? "bg-rose-50 border-rose-200 text-signal-red font-bold"
+                                      : "bg-paper border-line text-ink font-semibold"
+                                    : "bg-paper/40 border-line/50 text-slate/40"
+                                }`}
+                              >
+                                <span className="text-[9px] uppercase tracking-wider text-slate/70">
+                                  S{sIdx + 1}
                                 </span>
-                              ) : (
-                                <span className="text-slate/40 font-normal">--</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
-                          <td key={`empty-cell-${i}`} className="py-2 px-3 text-center text-slate/30">
-                            --
-                          </td>
+                                <span className="font-mono text-xs mt-0.5 leading-none">
+                                  {score !== null && score !== undefined ? (
+                                    score % 1 === 0 ? score.toString() : score.toFixed(1)
+                                  ) : (
+                                    "--"
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {/* Emplacements restants si moins de 6 séquences */}
+                          {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
+                            <div
+                              key={`empty-mobile-seq-${i}`}
+                              className="flex flex-col items-center justify-center p-1 rounded border border-line/30 bg-paper/20 text-slate/30 text-center"
+                            >
+                              <span className="text-[9px] uppercase tracking-wider">
+                                S{displaySequences.length + i + 1}
+                              </span>
+                              <span className="font-mono text-xs mt-0.5 leading-none">--</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 2. VERSION DESKTOP (md: et plus) : Tableau tabulaire standard complet */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-paper border-b border-line text-slate font-bold uppercase tracking-wider">
+                        <th className="py-2.5 px-3 w-10 text-center">N°</th>
+                        <th className="py-2.5 px-3 w-28">Matricule</th>
+                        <th className="py-2.5 px-3">Nom et Prénom</th>
+                        {displaySequences.map((seq, idx) => (
+                          <th key={seq.id} className="py-2.5 px-3 text-center w-20">
+                            Seq {idx + 1}
+                          </th>
                         ))}
+                        {/* Compléter à 6 colonnes si moins de séquences */}
+                        {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
+                          <th key={`empty-seq-${i}`} className="py-2.5 px-3 text-center w-20 text-slate/40">
+                            Seq {displaySequences.length + i + 1}
+                          </th>
+                        ))}
+                        <th className="py-2.5 px-3 text-center w-24">Moyenne</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {reportRows.map((row, idx) => (
+                        <tr key={row.student.id} className="hover:bg-paper/40 transition-colors">
+                          <td className="py-2 px-3 text-center font-mono text-slate font-bold">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2 px-3 font-mono text-slate">
+                            {row.student.matricule}
+                          </td>
+                          <td className="py-2 px-3 font-semibold text-ink">
+                            {row.student.last_name} {row.student.first_name}
+                          </td>
+                          {displaySequences.map((seq) => {
+                            const score = row.sequenceScores[seq.id];
+                            return (
+                              <td key={seq.id} className="py-2 px-3 text-center font-mono font-bold">
+                                {score !== null && score !== undefined ? (
+                                  <span className={score < 10 ? "text-signal-red" : "text-ink"}>
+                                    {score.toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate/40 font-normal">--</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
+                            <td key={`empty-cell-${i}`} className="py-2 px-3 text-center text-slate/30">
+                              --
+                            </td>
+                          ))}
+                          <td className="py-2 px-3 text-center font-mono font-bold">
+                            {row.average !== null ? (
+                              <span className={row.average < 10 ? "text-signal-red font-bold" : "text-[#150A5E]"}>
+                                {row.average.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-slate/40">--</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </>

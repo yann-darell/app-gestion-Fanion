@@ -1,4 +1,4 @@
-import { CreditCardIcon, EyeIcon, DownloadIcon, FileTextIcon, CloseIcon } from "../../components/ui/Icons";
+import { CreditCardIcon, EyeIcon, DownloadIcon, FileTextIcon, CloseIcon, PackageIcon } from "../../components/ui/Icons";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -8,11 +8,14 @@ import {
   getStudentPhotoUrl,
   getStudentPaymentsWithReceipts,
   getReceiptSignedUrl,
+  getStudentsSuppliesSummaryMap,
   StudentRecord,
   ClassRecord,
   PaymentWithReceipt,
+  StudentSupplySummary,
 } from "@fanion/shared";
 import NewStudentModal from "./components/NewStudentModal";
+import { StudentSuppliesModal } from "./components/StudentSuppliesModal";
 
 function formatDate(dateStr: string | undefined | null): string {
   if (!dateStr) return "—";
@@ -31,6 +34,8 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSuppliesModalOpen, setIsSuppliesModalOpen] = useState(false);
+  const [supplySummary, setSupplySummary] = useState<StudentSupplySummary | null>(null);
 
   const [effectiveRole, setEffectiveRole] = useState<string | undefined>(userRole);
 
@@ -69,6 +74,14 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
         setPhotoUrl(url);
       } else {
         setPhotoUrl(null);
+      }
+
+      // Charger le résumé des fournitures
+      try {
+        const summaryMap = await getStudentsSuppliesSummaryMap([stData.id], clsData);
+        setSupplySummary(summaryMap[stData.id] || null);
+      } catch (e) {
+        console.warn("Erreur chargement résumé fournitures élève:", e);
       }
     } catch (err) {
       console.error("Erreur chargement élève:", err);
@@ -186,6 +199,58 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
           <p className="text-sm font-medium text-ink">
             {classNameMap[student.class_id] || "Non affecté"}
           </p>
+
+          {/* Bloc Fournitures Scolaires */}
+          {isWriteAuthorized && (
+            <div className="w-full mt-2 pt-4 border-t border-line flex flex-col items-center gap-2">
+              <span className="text-xs uppercase font-semibold text-slate tracking-wider">
+                Fournitures Scolaires
+              </span>
+              {supplySummary && supplySummary.total_required > 0 ? (
+                <div className="w-full flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-600">État :</span>
+                    <span className={supplySummary.given_count === supplySummary.total_required ? "text-emerald-700" : "text-amber-800"}>
+                      {supplySummary.given_count} / {supplySummary.total_required} apportées
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        supplySummary.given_count === supplySummary.total_required
+                          ? "bg-emerald-500"
+                          : supplySummary.given_count > 0
+                          ? "bg-amber-500"
+                          : "bg-slate-300"
+                      }`}
+                      style={{
+                        width: `${Math.round(
+                          (supplySummary.given_count / supplySummary.total_required) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setIsSuppliesModalOpen(true)}
+                    className="mt-2 w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-semibold border border-indigo-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <PackageIcon className="w-3.5 h-3.5" />
+                    <span>Pointer les fournitures</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full text-center">
+                  <p className="text-xs text-slate-400 italic">Aucune exigence configurée</p>
+                  <button
+                    onClick={() => setIsSuppliesModalOpen(true)}
+                    className="mt-2 w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-medium border border-line transition cursor-pointer"
+                  >
+                    Vérifier les fournitures
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Info Section */}
@@ -229,6 +294,14 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
         onSave={loadStudentData}
         editingStudent={student}
         classes={classes}
+      />
+
+      <StudentSuppliesModal
+        isOpen={isSuppliesModalOpen}
+        onClose={() => setIsSuppliesModalOpen(false)}
+        student={student}
+        studentClass={classes.find((c) => c.id === student.class_id) || null}
+        onUpdateSummary={loadStudentData}
       />
     </div>
   );

@@ -1,5 +1,6 @@
-import { SchoolIcon, CalendarIcon, SpinnerIcon } from "../../components/ui/Icons";
+import { SchoolIcon, CalendarIcon, PackageIcon, SpinnerIcon } from "../../components/ui/Icons";
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   getSchoolSettings,
   getAcademicCalendar,
@@ -8,13 +9,23 @@ import {
 } from "@fanion/shared";
 import { SchoolSettingsTab } from "./components/SchoolSettingsTab";
 import { AcademicCalendarTab } from "./components/AcademicCalendarTab";
+import { SuppliesSettingsTab } from "./components/SuppliesSettingsTab";
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"school" | "calendar">("school");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get("tab") as "school" | "calendar" | "supplies") || "school";
+  const [activeTab, setActiveTab] = useState<"school" | "calendar" | "supplies">(
+    initialTab === "supplies" || initialTab === "calendar" ? initialTab : "school"
+  );
   const [settings, setSettings] = useState<SchoolSettings | null>(null);
   const [terms, setTerms] = useState<TermSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleTabChange = (tab: "school" | "calendar" | "supplies") => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -43,15 +54,15 @@ export const SettingsPage: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Paramètres Généraux</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Configuration globale de l'établissement et calendrier des évaluations &amp; verrouillage des séquences.
+          Configuration globale de l'établissement, calendrier &amp; verrouillage des séquences, et liste des fournitures scolaires exigées.
         </p>
       </div>
 
       {/* Barre d'onglets */}
-      <div className="flex border-b border-slate-200 gap-2">
+      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
         <button
-          onClick={() => setActiveTab("school")}
-          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${
+          onClick={() => handleTabChange("school")}
+          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "school"
               ? "border-indigo-600 text-indigo-600 font-semibold"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -61,14 +72,25 @@ export const SettingsPage: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab("calendar")}
-          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${
+          onClick={() => handleTabChange("calendar")}
+          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "calendar"
               ? "border-indigo-600 text-indigo-600 font-semibold"
               : "border-transparent text-slate-500 hover:text-slate-700"
           }`}
         >
           <CalendarIcon className="w-4 h-4 text-indigo-600" /> Calendrier &amp; Séquences
+        </button>
+
+        <button
+          onClick={() => handleTabChange("supplies")}
+          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === "supplies"
+              ? "border-indigo-600 text-indigo-600 font-semibold"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <PackageIcon className="w-4 h-4 text-indigo-600" /> Fournitures Scolaires
         </button>
       </div>
 
@@ -90,6 +112,10 @@ export const SettingsPage: React.FC = () => {
 
           {activeTab === "calendar" && (
             <AcademicCalendarTab terms={terms} onRefresh={loadData} />
+          )}
+
+          {activeTab === "supplies" && (
+            <SuppliesSettingsTab />
           )}
         </>
       )}

@@ -394,7 +394,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       {currentAssignment && (
         <div className="bg-white border border-line rounded p-4 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <label className="block text-xs font-bold text-ink uppercase tracking-wide">
+            <label htmlFor="competency-textarea" className="block text-xs font-bold text-ink uppercase tracking-wide">
               Compétence évaluée pour cette séquence
             </label>
             <span className="text-[11px] font-medium">
@@ -403,21 +403,25 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
             </span>
           </div>
           <p className="text-xs text-slate">
-            Description de l'activité d'évaluation ou savoir essentiel (apparaîtra sur les bulletins de tous les élèves de la classe).
+            Description de l'activité d'évaluation ou savoir essentiel (apparaîtra sur les bulletins).
           </p>
           <div className="relative">
-            <input
-              type="text"
+            <textarea
+              id="competency-textarea"
+              rows={2}
               maxLength={300}
               disabled={isReadOnlyForUser}
               value={competencyDescription}
               onChange={(e) => setCompetencyDescription(e.target.value)}
               onBlur={handleCompetencyBlur}
-              placeholder="Ex: Résoudre des équations du premier degré dans des situations de vie courante"
-              className={`w-full px-3 py-2 border border-line rounded text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink ${
+              placeholder="Ex : Résoudre des équations du premier degré dans des situations concrètes"
+              className={`w-full px-3 py-2 border border-line rounded text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink resize-none leading-snug ${
                 isReadOnlyForUser ? "bg-slate/5 cursor-not-allowed text-slate" : ""
               }`}
             />
+            <div className="text-[10px] text-slate/60 text-right mt-0.5">
+              {competencyDescription.length}/300 caractères
+            </div>
           </div>
         </div>
       )}
@@ -432,20 +436,20 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
           Aucun élève actif trouvé dans cette classe.
         </div>
       ) : (
-        <div className="bg-white border border-line rounded shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="bg-white border border-line rounded shadow-sm overflow-hidden pb-16 md:pb-0">
+          <div className="p-3 sm:p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
             <div>
               <span className="text-xs font-bold text-slate uppercase tracking-wider">
                 {students.length} Élève(s) dans la classe
               </span>
-              <span className="ml-3 text-xs font-semibold text-ink">
-                ({gradedStudentsCount}/{totalStudentsCount} note(s) renseignée(s))
+              <span className="ml-2 text-xs font-semibold text-ink">
+                ({gradedStudentsCount}/{totalStudentsCount} saisie{gradedStudentsCount > 1 ? "s" : ""})
               </span>
             </div>
             <span className="text-[11px] text-slate italic">
               {isReadOnlyForUser
                 ? "Saisie verrouillée après validation"
-                : "Sauvegarde automatique à la sortie du champ"}
+                : "Sauvegarde auto à la sortie du champ"}
             </span>
           </div>
 
@@ -459,32 +463,33 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
               return (
                 <div
                   key={student.id}
-                  className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-paper/30 transition-colors"
+                  className="p-3 sm:p-4 flex items-center justify-between gap-2 hover:bg-paper/30 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs font-bold text-slate w-6">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span className="font-mono text-xs font-bold text-slate w-5 sm:w-6 flex-shrink-0">
                       #{idx + 1}
                     </span>
-                    <div>
-                      <h4 className="text-sm font-semibold text-ink leading-tight">
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-semibold text-ink leading-tight truncate">
                         {student.last_name} {student.first_name}
                       </h4>
-                      <p className="text-[11px] text-slate font-mono mt-0.5">
-                        Matricule: {student.matricule}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] sm:text-[11px] text-slate font-mono">
+                          {student.matricule}
+                        </span>
+                        {letterGrade && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate/10 text-ink">
+                            {letterGrade}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 justify-end self-end sm:self-center">
-                    {letterGrade && (
-                      <span className="text-xs font-bold px-2 py-1 rounded bg-slate/10 text-ink">
-                        Lettre: {letterGrade}
-                      </span>
-                    )}
-
-                    <span className="text-[11px] w-20 text-right font-medium">
-                      {isSaving && <span className="text-fanion-gold animate-pulse">Enregistrement...</span>}
-                      {isSaved && <span className="text-fanion-green font-bold inline-flex items-center gap-1"><CheckIcon className="w-3.5 h-3.5" /> Enregistré</span>}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[10px] sm:text-[11px] w-14 sm:w-20 text-right font-medium">
+                      {isSaving && <span className="text-fanion-gold animate-pulse">Sauv...</span>}
+                      {isSaved && <span className="text-fanion-green font-bold inline-flex items-center gap-0.5"><CheckIcon className="w-3 h-3" /> OK</span>}
                     </span>
 
                     <div className="relative flex items-center">
@@ -499,11 +504,11 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
                         onChange={(e) => handleScoreChange(student.id, e.target.value)}
                         onBlur={() => handleScoreBlur(student.id)}
                         placeholder="/ 20"
-                        className={`w-24 px-3 py-2 border border-line rounded text-right font-mono font-bold text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink ${
+                        className={`w-18 sm:w-24 px-2 py-1.5 sm:px-3 sm:py-2 border border-line rounded text-right font-mono font-bold text-xs sm:text-sm bg-paper focus:outline-none focus:ring-1 focus:ring-ink ${
                           isReadOnlyForUser ? "bg-slate/5 cursor-not-allowed text-slate" : ""
                         }`}
                       />
-                      <span className="ml-1 text-xs text-slate font-mono font-semibold">/20</span>
+                      <span className="ml-1 text-[11px] sm:text-xs text-slate font-mono font-semibold">/20</span>
                     </div>
                   </div>
                 </div>
@@ -511,20 +516,23 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
             })}
           </div>
 
-          {/* Barre d'action de validation globale de la classe */}
-          <div className="p-4 border-t border-line bg-paper/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate">
+          {/* Barre d'action de validation globale de la classe — FIXE SUR MOBILE en bas au-dessus du BottomNav */}
+          <div className="fixed bottom-16 left-0 right-0 z-20 md:static bg-white/95 md:bg-paper/30 backdrop-blur-md md:backdrop-blur-none border-t border-line p-3 sm:p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:shadow-none flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-slate w-full sm:w-auto text-center sm:text-left">
               {!isClassComplete ? (
-                <span className="text-signal-red font-medium">
-                  <span className="inline-flex items-center gap-1.5"><AlertTriangleIcon className="w-4 h-4 text-signal-red flex-shrink-0" /> Toutes les notes doivent être remplies ({gradedStudentsCount}/{totalStudentsCount}) pour pouvoir valider la classe.</span>
+                <span className="text-signal-red font-medium flex items-center justify-center sm:justify-start gap-1.5">
+                  <AlertTriangleIcon className="w-4 h-4 text-signal-red flex-shrink-0" />
+                  <span>Notes : <strong>{gradedStudentsCount}/{totalStudentsCount}</strong> ({totalStudentsCount - gradedStudentsCount} restante{totalStudentsCount - gradedStudentsCount > 1 ? "s" : ""})</span>
                 </span>
               ) : isLockedBySubmission ? (
-                <span className="text-fanion-green font-medium">
-                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" /> Toutes les notes ont été validées et transmises à la Direction.</span>
+                <span className="text-fanion-green font-medium flex items-center justify-center sm:justify-start gap-1.5">
+                  <CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" />
+                  <span>Notes validées et transmises.</span>
                 </span>
               ) : (
-                <span className="text-slate font-medium">
-                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-slate flex-shrink-0" /> Toutes les notes sont saisies. Vous pouvez maintenant valider et envoyer les notes.</span>
+                <span className="text-fanion-green font-medium flex items-center justify-center sm:justify-start gap-1.5">
+                  <CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" />
+                  <span>Classe complète ({gradedStudentsCount}/{totalStudentsCount}) — Prête à valider !</span>
                 </span>
               )}
             </div>
@@ -535,9 +543,9 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
                 id="btn-validate-class-grades"
                 disabled={!isClassComplete || submitting || isReadOnlyForUser}
                 onClick={handleSubmitClass}
-                className={`px-5 py-2.5 rounded text-sm font-bold shadow-sm transition-all flex items-center gap-2 ${
+                className={`w-full sm:w-auto px-5 py-2.5 rounded text-xs sm:text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-2 ${
                   isClassComplete && !isReadOnlyForUser
-                    ? "bg-fanion-green hover:bg-emerald-700 text-white cursor-pointer"
+                    ? "bg-fanion-green hover:bg-emerald-700 text-white cursor-pointer active:scale-98"
                     : "bg-slate/20 text-slate/60 cursor-not-allowed"
                 }`}
               >

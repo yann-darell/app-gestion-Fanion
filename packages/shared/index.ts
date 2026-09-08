@@ -16,6 +16,7 @@ export * from "./api/classFinancialReportPdfService";
 export * from "./api/classReportPdfService";
 export * from "./services/classReportService";
 export * from "./services/settingsService";
+export * from "./services/supplyService";
 export * from "./services/dashboardService";
 export * from "./config/navigation";
 export * from "./hooks/useSelectionPersistence";
