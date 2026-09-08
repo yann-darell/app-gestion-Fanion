@@ -1,0 +1,25 @@
+{
+  "name": "Collège Le Fanion - Gestion Scolaire",
+  "short_name": "Le Fanion",
+  "description": "Application de gestion scolaire, administrative et financière du Collège Le Fanion",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF9F5",
+  "theme_color": "#150A5E",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

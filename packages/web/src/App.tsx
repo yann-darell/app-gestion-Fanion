@@ -20,6 +20,7 @@ import PaymentEntryPage from "./pages/finance/PaymentEntryPage";
 import ClassFinancialReportPage from "./pages/finance/ClassFinancialReportPage";
 import AdminGradesPage from "./pages/grades/AdminGradesPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
+import DashboardPage from "./pages/dashboard/DashboardPage";
 
 type Profile = {
   id: string;
@@ -167,7 +168,7 @@ const ProtectedRoute: React.FC<{ userRole?: string; children?: React.ReactNode }
 // ─── ÉCRAN D'ACCUEIL SELON RÔLE ──────────────────────────────────────────────
 const HomePage: React.FC<{ userRole?: string }> = ({ userRole }) => {
   if (userRole === "principal" || userRole === "directeur_etudes") {
-    return <Navigate to="/students" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   if (userRole === "enseignant") {
     return <Navigate to="/teacher/grades" replace />;
@@ -449,6 +450,7 @@ export default function App() {
           <Route index element={<HomePage userRole={profile?.role} />} />
 
           <Route element={<ProtectedRoute userRole={profile?.role} />}>
+            <Route path="dashboard" element={<DashboardPage userRole={profile?.role} />} />
             <Route path="classes" element={<ClassesPage userRole={profile?.role} />} />
             <Route path="students" element={<StudentsPage userRole={profile?.role} />} />
             <Route path="students/:id" element={<StudentDetailPage userRole={profile?.role} />} />

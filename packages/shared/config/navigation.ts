@@ -12,6 +12,15 @@ export interface NavGroup {
 }
 
 export const NAVIGATION_ITEMS: NavItemConfig[] = [
+  // --- Vue d'ensemble ---
+  {
+    id: "dashboard",
+    to: "/dashboard",
+    label: "Tableau de bord",
+    category: "Vue d'ensemble",
+    allowedRoles: ["principal", "directeur_etudes"],
+  },
+
   // --- Structure & Pédagogie ---
   {
     id: "students",

@@ -435,7 +435,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
                       dataKey="count"
                       position="top"
                       style={{ fontSize: "10px", fontWeight: 700, fill: "#150A5E" }}
-                      formatter={(v: number) => (v > 0 ? v : "")}
+                      formatter={(v: any) => (Number(v) > 0 ? v : "")}
                     />
                   </Bar>
                 </BarChart>
