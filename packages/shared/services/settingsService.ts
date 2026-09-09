@@ -21,6 +21,7 @@ export interface SequenceSetting {
   start_date: string | null;
   end_date: string | null;
   is_locked: boolean;
+  grace_period_days: number;
 }
 
 export interface TermSetting {
@@ -129,6 +130,7 @@ export async function getAcademicCalendar(): Promise<TermSetting[]> {
         start_date: s.start_date || null,
         end_date: s.end_date || null,
         is_locked: !!s.is_locked,
+        grace_period_days: Number(s.grace_period_days || 0),
       })),
   }));
 }
@@ -146,11 +148,11 @@ export async function updateTermDates(id: string, start_date: string | null, end
 }
 
 /**
- * Met à jour les dates et/ou l'état de verrouillage d'une séquence
+ * Met à jour les dates, le délai de grâce et/ou l'état de verrouillage d'une séquence
  */
 export async function updateSequenceSettings(
   id: string,
-  updates: { start_date?: string | null; end_date?: string | null; is_locked?: boolean }
+  updates: { start_date?: string | null; end_date?: string | null; is_locked?: boolean; grace_period_days?: number }
 ): Promise<void> {
   const { error } = await supabase
     .from("sequences")

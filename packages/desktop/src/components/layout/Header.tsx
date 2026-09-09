@@ -1,5 +1,6 @@
 import React from "react";
 import logoFanion from "@/assets/logo_fanion.webp";
+import NotificationBellDropdown from "./NotificationBellDropdown";
 
 interface HeaderProps {
     userFullName?: string;
@@ -17,6 +18,9 @@ export const Header: React.FC<HeaderProps> = ({ userFullName, userRole, onLogout
                 </span>
             </div>
             <div className="flex items-center gap-4">
+                {/* Centre de notifications pour Principal et Directeur des Études */}
+                <NotificationBellDropdown userRole={userRole} />
+
                 {userFullName && (
                     <div className="flex items-center gap-3 border-r border-line pr-4">
                         <div className="text-right">

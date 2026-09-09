@@ -58,6 +58,20 @@ export const AcademicCalendarTab: React.FC<AcademicCalendarTabProps> = ({ terms,
     }
   };
 
+  const handleGracePeriodChange = async (seqId: string, graceDays: number) => {
+    setSavingId(`seq-grace-${seqId}`);
+    setToast(null);
+    try {
+      await updateSequenceSettings(seqId, { grace_period_days: Math.max(0, graceDays || 0) });
+      setToast({ type: "success", message: "Délai de grâce mis à jour !" });
+      onRefresh();
+    } catch (err: any) {
+      setToast({ type: "error", message: err.message || "Erreur lors de la mise à jour du délai de grâce." });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -144,7 +158,7 @@ export const AcademicCalendarTab: React.FC<AcademicCalendarTabProps> = ({ terms,
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-3 gap-2 text-xs">
                         <div>
                           <span className="text-slate-500 block mb-1">Début:</span>
                           <input
@@ -161,6 +175,18 @@ export const AcademicCalendarTab: React.FC<AcademicCalendarTabProps> = ({ terms,
                             defaultValue={seq.end_date || ""}
                             onBlur={(e) => handleSequenceDateChange(seq.id, seq.start_date || "", e.target.value)}
                             className="w-full px-2 py-1 border border-slate-300 rounded bg-white text-slate-700"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block mb-1" title="Jours accordés après la date de fin avant alerte">
+                            Grâce (j):
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            defaultValue={seq.grace_period_days ?? 0}
+                            onBlur={(e) => handleGracePeriodChange(seq.id, parseInt(e.target.value, 10) || 0)}
+                            className="w-full px-2 py-1 border border-slate-300 rounded bg-white text-slate-700 font-mono"
                           />
                         </div>
                       </div>

@@ -1,4 +1,5 @@
 import React from "react";
+import NotificationBellDropdown from "./NotificationBellDropdown";
 
 interface HeaderProps {
   userFullName?: string;
@@ -35,8 +36,11 @@ export const Header: React.FC<HeaderProps> = ({
         </span>
       </div>
 
-      {/* Right side: user profile & logout button */}
+      {/* Right side: notifications, user profile & logout button */}
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Centre de notifications pour Principal et Directeur des Études */}
+        <NotificationBellDropdown userRole={userRole} />
+
         {userFullName && (
           <div className="flex items-center gap-2 md:gap-3 border-r border-line pr-2 md:pr-4">
             <div className="text-right hidden sm:block">

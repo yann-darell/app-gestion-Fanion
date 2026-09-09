@@ -14,6 +14,7 @@ export * from "./api/financeService";
 export * from "./api/financialReportService";
 export * from "./api/classFinancialReportPdfService";
 export * from "./api/classReportPdfService";
+export * from "./api/notificationsService";
 export * from "./services/classReportService";
 export * from "./services/settingsService";
 export * from "./services/supplyService";

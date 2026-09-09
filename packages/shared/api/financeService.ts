@@ -245,6 +245,24 @@ export async function upsertStudentFeeOverride(
 }
 
 /**
+ * Supprime la réduction / bourse individuelle d'un élève (rétablissement du tarif standard).
+ */
+export async function deleteStudentFeeOverride(
+  studentId: string,
+  schoolYearId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("student_fee_overrides")
+    .delete()
+    .eq("student_id", studentId)
+    .eq("school_year_id", schoolYearId);
+
+  if (error) {
+    throw new Error(`Erreur lors de la suppression de la réduction élève: ${error.message}`);
+  }
+}
+
+/**
  * Récupère l'historique des paiements d'un élève pour une année scolaire.
  */
 export async function getStudentPayments(

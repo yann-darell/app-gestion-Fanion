@@ -257,16 +257,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = () => {
               </Link>
 
               <Link
-                to="/bulletins"
+                to="/finance/class-report"
                 className="p-4 rounded-xl bg-white border border-line hover:border-ink/40 hover:bg-slate/5 transition group flex flex-col items-start"
               >
                 <div className="p-2.5 rounded-lg bg-indigo-50 text-indigo-700 group-hover:scale-105 transition mb-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                 </div>
-                <span className="text-sm font-bold text-ink group-hover:text-indigo-900">Bulletins PDF</span>
-                <span className="text-xs text-slate mt-0.5">Génération & téléchargement</span>
+                <span className="text-sm font-bold text-ink group-hover:text-indigo-900">Fiche de paiement de classe</span>
+                <span className="text-xs text-slate mt-0.5">Bordereau financier & exports</span>
               </Link>
 
               <Link

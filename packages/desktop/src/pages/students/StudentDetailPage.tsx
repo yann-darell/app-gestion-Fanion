@@ -9,13 +9,16 @@ import {
   getStudentPaymentsWithReceipts,
   getReceiptSignedUrl,
   getStudentsSuppliesSummaryMap,
+  getStudentFeeOverride,
   StudentRecord,
   ClassRecord,
   PaymentWithReceipt,
   StudentSupplySummary,
+  StudentFeeOverride,
 } from "@fanion/shared";
 import NewStudentModal from "./components/NewStudentModal";
 import { StudentSuppliesModal } from "./components/StudentSuppliesModal";
+import { StudentFeeOverrideModal } from "./components/StudentFeeOverrideModal";
 
 function formatDate(dateStr: string | undefined | null): string {
   if (!dateStr) return "—";
@@ -35,7 +38,10 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSuppliesModalOpen, setIsSuppliesModalOpen] = useState(false);
+  const [isFeeOverrideModalOpen, setIsFeeOverrideModalOpen] = useState(false);
   const [supplySummary, setSupplySummary] = useState<StudentSupplySummary | null>(null);
+  const [feeOverride, setFeeOverride] = useState<StudentFeeOverride | null>(null);
+  const [activeSchoolYearId, setActiveSchoolYearId] = useState<string | null>(null);
 
   const [effectiveRole, setEffectiveRole] = useState<string | undefined>(userRole);
 
@@ -43,8 +49,17 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
     if (userRole) {
       setEffectiveRole(userRole);
     } else {
-      supabase.from("profiles").select("role").eq("id", (supabase.auth.getUser() as any)?.data?.user?.id).single().then(({ data }) => {
-        if (data?.role) setEffectiveRole(data.role);
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (user) {
+          supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .single()
+            .then(({ data }) => {
+              if (data?.role) setEffectiveRole(data.role);
+            });
+        }
       });
     }
   }, [userRole]);
@@ -74,6 +89,37 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
         setPhotoUrl(url);
       } else {
         setPhotoUrl(null);
+      }
+
+      // Charger l'année active et le statut de réduction
+      try {
+        let activeYearId: string | null = null;
+        const { data: activeYear } = await supabase
+          .from("school_years")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (activeYear?.id) {
+          activeYearId = activeYear.id;
+        } else {
+          const { data: fallbackYears } = await supabase
+            .from("school_years")
+            .select("id")
+            .order("start_date", { ascending: false })
+            .limit(1);
+          if (fallbackYears && fallbackYears.length > 0) {
+            activeYearId = fallbackYears[0].id;
+          }
+        }
+
+        if (activeYearId) {
+          setActiveSchoolYearId(activeYearId);
+          const override = await getStudentFeeOverride(stData.id, activeYearId);
+          setFeeOverride(override);
+        }
+      } catch (e) {
+        console.warn("Erreur chargement réduction élève:", e);
       }
 
       // Charger le résumé des fournitures
@@ -251,6 +297,46 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
               )}
             </div>
           )}
+
+          {/* Bloc Bourse & Réduction de Scolarité (F5) */}
+          {isWriteAuthorized && activeSchoolYearId && (
+            <div className="w-full mt-2 pt-4 border-t border-line flex flex-col items-center gap-2">
+              <span className="text-xs uppercase font-semibold text-slate tracking-wider">
+                Bourse & Réduction (F5)
+              </span>
+              {feeOverride ? (
+                <div className="w-full p-2.5 bg-emerald-50/80 border border-emerald-200 rounded text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-900">Scolarité fixée :</span>
+                    <span className="font-mono font-bold text-emerald-800">
+                      {Math.round(feeOverride.total_amount_override).toLocaleString("fr-FR")} FCFA
+                    </span>
+                  </div>
+                  {feeOverride.reason && (
+                    <p className="text-[11px] text-emerald-700 italic">
+                      « {feeOverride.reason} »
+                    </p>
+                  )}
+                  <button
+                    onClick={() => setIsFeeOverrideModalOpen(true)}
+                    className="mt-2 w-full py-1.5 px-3 bg-white hover:bg-emerald-100 text-emerald-900 rounded text-xs font-semibold border border-emerald-300 transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>Modifier la bourse</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full text-center">
+                  <p className="text-xs text-slate-500">Tarif standard de classe appliqué</p>
+                  <button
+                    onClick={() => setIsFeeOverrideModalOpen(true)}
+                    className="mt-2 w-full py-1.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded text-xs font-semibold border border-purple-200 transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>+ Définir une réduction</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Info Section */}
@@ -312,6 +398,18 @@ export default function StudentDetailPage({ userRole }: { userRole?: string }) {
         studentClass={classes.find((c) => c.id === student.class_id) || null}
         onUpdateSummary={loadStudentData}
       />
+
+      {activeSchoolYearId && (
+        <StudentFeeOverrideModal
+          isOpen={isFeeOverrideModalOpen}
+          onClose={() => setIsFeeOverrideModalOpen(false)}
+          studentId={student.id}
+          studentName={`${student.last_name} ${student.first_name}`}
+          classId={student.class_id}
+          schoolYearId={activeSchoolYearId}
+          onSaved={loadStudentData}
+        />
+      )}
     </div>
   );
 }
