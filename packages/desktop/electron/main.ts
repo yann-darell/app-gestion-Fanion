@@ -36,8 +36,9 @@ app.whenReady().then(() => {
     protocol.handle("fanion-photo", (request) => {
         try {
             const url = new URL(request.url);
-            // Déterminer le nom de fichier (soit hostname soit pathname)
-            const filename = decodeURIComponent(url.hostname || url.pathname.replace(/^\/+/, ""));
+            // Déterminer le nom de fichier et assainir contre le Path Traversal (SECURITE.md)
+            const rawFilename = decodeURIComponent(url.hostname || url.pathname.replace(/^\/+/, ""));
+            const filename = path.basename(rawFilename);
             const filePath = path.join(app.getPath("userData"), "photos", filename);
             return net.fetch(pathToFileURL(filePath).toString());
         } catch (error) {

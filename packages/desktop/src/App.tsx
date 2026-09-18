@@ -4,24 +4,24 @@ import { supabase, isRouteAllowedForRole } from "@fanion/shared";
 import logoFanion from "./assets/logo_fanion.webp";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
-import ClassesPage from "./pages/classes/ClassesPage";
+import { ClassesPage } from "./pages/classes/ClassesPage";
 import StudentsPage from "./pages/students/StudentsPage";
 import StudentDetailPage from "./pages/students/StudentDetailPage";
-import SubjectsPage from "./pages/subjects/SubjectsPage";
-import CoefficientsPage from "./pages/subjects/CoefficientsPage";
-import TeacherAssignmentsPage from "./pages/assignments/TeacherAssignmentsPage";
-import TeacherOverviewPage from "./pages/assignments/TeacherOverviewPage";
-import UserAccountsPage from "./pages/users/UserAccountsPage";
-import TeacherGradesPage from "./pages/teacher/TeacherGradesPage";
-import TeacherEvolutionPage from "./pages/teacher/TeacherEvolutionPage";
-import BulletinsPdfPage from "./pages/reports/BulletinsPdfPage";
-import ClassReportPage from "./pages/reports/ClassReportPage";
-import FeeSchedulePage from "./pages/finance/FeeSchedulePage";
-import PaymentEntryPage from "./pages/finance/PaymentEntryPage";
-import ClassFinancialReportPage from "./pages/finance/ClassFinancialReportPage";
-import AdminGradesPage from "./pages/grades/AdminGradesPage";
-import { SettingsPage } from "../../web/src/pages/settings/SettingsPage";
-import DashboardPage from "./pages/dashboard/DashboardPage";
+import { SubjectsPage } from "./pages/subjects/SubjectsPage";
+import { CoefficientsPage } from "./pages/subjects/CoefficientsPage";
+import { TeacherAssignmentsPage } from "./pages/assignments/TeacherAssignmentsPage";
+import { TeacherOverviewPage } from "./pages/assignments/TeacherOverviewPage";
+import { UserAccountsPage } from "./pages/users/UserAccountsPage";
+import { TeacherGradesPage } from "./pages/teacher/TeacherGradesPage";
+import { TeacherEvolutionPage } from "./pages/teacher/TeacherEvolutionPage";
+import { BulletinsPdfPage } from "./pages/reports/BulletinsPdfPage";
+import { ClassReportPage } from "./pages/reports/ClassReportPage";
+import { FeeSchedulePage } from "./pages/finance/FeeSchedulePage";
+import { PaymentEntryPage } from "./pages/finance/PaymentEntryPage";
+import { ClassFinancialReportPage } from "./pages/finance/ClassFinancialReportPage";
+import { AdminGradesPage } from "./pages/grades/AdminGradesPage";
+import { SettingsPage } from "./pages/settings/SettingsPage";
+import { DashboardPage } from "./pages/dashboard/DashboardPage";
 
 type Profile = {
   id: string;
@@ -41,8 +41,17 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
+    if (password.length < 10) {
+      setError("Le mot de passe doit contenir au moins 10 caractères.");
+      return;
+    }
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+      setError("Le mot de passe doit inclure au moins une majuscule, une minuscule, un chiffre et un caractère spécial.");
       return;
     }
     if (password !== confirm) {
@@ -100,7 +109,7 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
                   <label className="block text-xs font-semibold text-slate uppercase mb-1">Nouveau mot de passe</label>
                   <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
-                    placeholder="Minimum 8 caractères" required minLength={8} />
+                    placeholder="Minimum 10 caractères (maj, min, chiffre, symbole)" required minLength={10} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate uppercase mb-1">Confirmer le mot de passe</label>

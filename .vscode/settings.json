@@ -2,5 +2,7 @@
     "workbench.editor.centeredLayoutFixedWidth": false,
     "workbench.editor.enablePreviewFromCodeNavigation": false,
     "workbench.editor.editorActionsLocation": "default",
-    "workbench.editor.doubleClickTabToToggleEditorGroupSizes": "expand"
+    "workbench.editor.doubleClickTabToToggleEditorGroupSizes": "expand",
+    "deno.enable": false,
+    "typescript.validate.enable": true
 }

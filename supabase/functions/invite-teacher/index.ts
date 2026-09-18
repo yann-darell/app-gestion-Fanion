@@ -1,10 +1,29 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+// Rate limiter en mémoire : maximum 10 requêtes par minute par utilisateur
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+
+function isRateLimited(identifier: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(identifier);
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(identifier, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+  record.count += 1;
+  return false;
+}
 
 Deno.serve(async (req: Request) => {
   // Gérer les requêtes CORS Preflight
@@ -27,8 +46,9 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+      console.error("Configuration serveur manquante : SUPABASE_URL, ANON_KEY ou SERVICE_ROLE_KEY introuvables.");
       return new Response(
-        JSON.stringify({ error: "Variables d'environnement Supabase manquantes sur le serveur." }),
+        JSON.stringify({ error: "Configuration serveur indisponible." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -50,6 +70,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Contrôle de limitation de débit (Anti-Bruteforce / Anti-DoS - Faille 5)
+    if (isRateLimited(callerUser.id)) {
+      return new Response(
+        JSON.stringify({ error: "Trop de requêtes. Veuillez patienter avant de réessayer." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // 2. Vérification du rôle dans la table profiles
     const { data: callerProfile, error: profileError } = await callerClient
       .from("profiles")
@@ -59,7 +87,7 @@ Deno.serve(async (req: Request) => {
 
     if (profileError || !callerProfile) {
       return new Response(
-        JSON.stringify({ error: "Impossible de récupérer le profil de l'utilisateur appelant." }),
+        JSON.stringify({ error: "Impossible de vérifier les autorisations." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -68,7 +96,7 @@ Deno.serve(async (req: Request) => {
     if (!allowedRoles.includes(callerProfile.role)) {
       return new Response(
         JSON.stringify({
-          error: "Accès refusé. Seuls le Principal et le Directeur des Études sont autorisés à inviter des enseignants.",
+          error: "Accès refusé. Privilèges administratifs requis.",
         }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -100,8 +128,9 @@ Deno.serve(async (req: Request) => {
       });
 
     if (inviteError) {
+      console.error("Erreur inviteUserByEmail:", inviteError);
       return new Response(
-        JSON.stringify({ error: `Erreur Supabase Auth Admin : ${inviteError.message}` }),
+        JSON.stringify({ error: "Impossible d'envoyer l'invitation à cette adresse email." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -118,9 +147,10 @@ Deno.serve(async (req: Request) => {
     );
 
     if (profileInsertError) {
+      console.error("Erreur upsert profil enseignant:", profileInsertError);
       return new Response(
         JSON.stringify({
-          error: `Compte utilisateur créé mais échec de la mise à jour du profil : ${profileInsertError.message}`,
+          error: "Compte utilisateur créé mais échec de la mise à jour du profil.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -139,8 +169,9 @@ Deno.serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
+    console.error("Erreur interne invite-teacher:", err);
     return new Response(
-      JSON.stringify({ error: `Erreur serveur : ${err?.message || err}` }),
+      JSON.stringify({ error: "Une erreur interne est survenue lors du traitement." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

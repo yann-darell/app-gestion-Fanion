@@ -284,6 +284,111 @@ export const DashboardPage: React.FC<DashboardPageProps> = () => {
             </div>
           </div>
 
+          {/* ── ACTIVITÉ RÉCENTE : 2 colonnes ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* ── 5 DERNIERS ÉLÈVES INSCRITS ── */}
+            <div className="bg-white rounded-xl border border-line shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-line flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-blue-50 text-blue-700">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                  </span>
+                  <h2 className="text-sm font-display font-bold text-ink">Derniers élèves inscrits</h2>
+                </div>
+                <Link to="/students" className="text-xs text-blue-600 hover:text-blue-800 font-medium transition">
+                  Voir tout →
+                </Link>
+              </div>
+              <div className="divide-y divide-line">
+                {metrics.recentStudents.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate">Aucun élève trouvé.</p>
+                ) : (
+                  metrics.recentStudents.map((s) => {
+                    const initials = `${s.firstName.charAt(0)}${s.lastName.charAt(0)}`.toUpperCase();
+                    const dateStr = s.createdAt
+                      ? new Date(s.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—";
+                    const isActive = s.status === "active";
+                    return (
+                      <div key={s.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate/5 transition">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {initials || "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">
+                            {s.firstName} {s.lastName}
+                          </p>
+                          <p className="text-xs text-slate truncate">{s.className}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            isActive ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {isActive ? "Actif" : "En attente"}
+                          </span>
+                          <span className="text-[10px] text-slate">{dateStr}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* ── 5 DERNIERS PAIEMENTS ── */}
+            <div className="bg-white rounded-xl border border-line shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-line flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </span>
+                  <h2 className="text-sm font-display font-bold text-ink">Derniers paiements</h2>
+                </div>
+                <Link to="/finance/payments" className="text-xs text-emerald-600 hover:text-emerald-800 font-medium transition">
+                  Voir tout →
+                </Link>
+              </div>
+              <div className="divide-y divide-line">
+                {metrics.recentPayments.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate">Aucun paiement trouvé.</p>
+                ) : (
+                  metrics.recentPayments.map((p) => {
+                    const initials = `${p.studentFirstName.charAt(0)}${p.studentLastName.charAt(0)}`.toUpperCase();
+                    const dateStr = p.paymentDate
+                      ? new Date(p.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—";
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate/5 transition">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {initials || "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">
+                            {p.studentFirstName} {p.studentLastName}
+                          </p>
+                          {p.receiptNumber && (
+                            <p className="text-xs text-slate truncate">Reçu n° {p.receiptNumber}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="text-sm font-bold text-emerald-700">
+                            {new Intl.NumberFormat("fr-FR").format(p.amount)} FCFA
+                          </span>
+                          <span className="text-[10px] text-slate">{dateStr}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* ── TABLEAU DE BORD OPÉRATIONNEL PAR CLASSE ── */}
           <div className="bg-white rounded-xl border border-line shadow-sm overflow-hidden">
             <div className="p-5 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2">

@@ -44,8 +44,18 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
+    // Règle robuste de mot de passe (Faille 19)
+    if (password.length < 10) {
+      setError("Le mot de passe doit contenir au moins 10 caractères.");
+      return;
+    }
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecialChar = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+      setError("Le mot de passe doit inclure au moins une majuscule, une minuscule, un chiffre et un caractère spécial.");
       return;
     }
     if (password !== confirm) {
@@ -117,9 +127,9 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full px-3 py-2 border border-line rounded focus:outline-none focus:ring-1 focus:ring-ink bg-paper text-sm"
-                    placeholder="Minimum 8 caractères"
+                    placeholder="Minimum 10 caractères (maj, min, chiffre, symbole)"
                     required
-                    minLength={8}
+                    minLength={10}
                   />
                 </div>
 

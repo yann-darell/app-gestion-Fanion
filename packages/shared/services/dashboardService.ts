@@ -22,6 +22,24 @@ export interface ClassDashboardSummary {
   totalExpected: number;
 }
 
+export interface RecentStudent {
+  id: string;
+  firstName: string;
+  lastName: string;
+  className: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface RecentPayment {
+  id: string;
+  studentFirstName: string;
+  studentLastName: string;
+  amount: number;
+  paymentDate: string;
+  receiptNumber: string | null;
+}
+
 export interface DashboardMetrics {
   schoolYear: {
     id: string;
@@ -64,6 +82,8 @@ export interface DashboardMetrics {
     gradeSubmissionRate: number;
   };
   classesSummary: ClassDashboardSummary[];
+  recentStudents: RecentStudent[];
+  recentPayments: RecentPayment[];
 }
 
 /**
@@ -117,6 +137,8 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     paymentsRes,
     feeSchedulesRes,
     feeOverridesRes,
+    recentStudentsRes,
+    recentPaymentsRes,
   ] = await Promise.all([
     supabase.from("classes").select("id, name, division_id, level").order("name"),
     supabase.from("divisions").select("id, name"),
@@ -140,6 +162,20 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       .from("student_fee_overrides")
       .select("student_id, total_amount_override")
       .eq("school_year_id", activeYear.id),
+    // 5 derniers élèves inscrits
+    supabase
+      .from("students")
+      .select("id, first_name, last_name, class_id, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    // 5 derniers paiements
+    supabase
+      .from("payments")
+      .select("id, student_id, amount, payment_date, receipt_number, students(first_name, last_name)")
+      .eq("school_year_id", activeYear.id)
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   if (classesRes.error) throw new Error(`Erreur classes: ${classesRes.error.message}`);
@@ -341,6 +377,29 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     };
   });
 
+  // ─── E. Données récentes ──────────────────────────────────────────────────────
+  // Construire un map classe_id -> nom de classe pour les élèves récents
+  const classNameMap = new Map<string, string>();
+  classes.forEach((c) => classNameMap.set(c.id, c.name));
+
+  const recentStudents: RecentStudent[] = (recentStudentsRes.data || []).map((s: any) => ({
+    id: s.id,
+    firstName: s.first_name || "",
+    lastName: s.last_name || "",
+    className: s.class_id ? (classNameMap.get(s.class_id) || "—") : "—",
+    status: s.status || "",
+    createdAt: s.created_at || "",
+  }));
+
+  const recentPayments: RecentPayment[] = (recentPaymentsRes.data || []).map((p: any) => ({
+    id: p.id,
+    studentFirstName: p.students?.first_name || "",
+    studentLastName: p.students?.last_name || "",
+    amount: Number(p.amount || 0),
+    paymentDate: p.payment_date || "",
+    receiptNumber: p.receipt_number || null,
+  }));
+
   return {
     schoolYear: {
       id: activeYear.id,
@@ -378,5 +437,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       gradeSubmissionRate,
     },
     classesSummary,
+    recentStudents,
+    recentPayments,
   };
 }

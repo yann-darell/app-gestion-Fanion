@@ -1,10 +1,29 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+// Rate limiter en mémoire : maximum 20 requêtes par minute par utilisateur
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+
+function isRateLimited(identifier: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(identifier);
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(identifier, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+  record.count += 1;
+  return false;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -25,10 +44,10 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY") || "";
 
     if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+      console.error("Configuration Supabase manquante sur le serveur (SUPABASE_SERVICE_ROLE_KEY non configurée).");
       return new Response(
         JSON.stringify({ 
-          error: "Variables d'environnement Supabase manquantes sur le serveur (SUPABASE_SERVICE_ROLE_KEY non configurée).",
-          details: { url: !!supabaseUrl, anon: !!supabaseAnonKey, service: !!serviceRoleKey }
+          error: "Configuration serveur indisponible."
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -50,6 +69,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Contrôle de limitation de débit (Anti-Bruteforce / Anti-DoS - Faille 5)
+    if (isRateLimited(callerUser.id)) {
+      return new Response(
+        JSON.stringify({ error: "Trop de requêtes. Veuillez patienter avant de réessayer." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { data: callerProfile, error: profileError } = await callerClient
       .from("profiles")
       .select("role")
@@ -58,7 +85,7 @@ Deno.serve(async (req: Request) => {
 
     if (profileError || !callerProfile) {
       return new Response(
-        JSON.stringify({ error: "Impossible de récupérer le profil de l'utilisateur appelant." }),
+        JSON.stringify({ error: "Impossible de vérifier les autorisations." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -67,7 +94,7 @@ Deno.serve(async (req: Request) => {
     if (!allowedRoles.includes(callerProfile.role)) {
       return new Response(
         JSON.stringify({
-          error: "Accès refusé. Seuls le Principal et le Directeur des Études sont autorisés à modifier le statut d'un enseignant.",
+          error: "Accès refusé. Privilèges administratifs requis.",
         }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -97,14 +124,16 @@ Deno.serve(async (req: Request) => {
           ban_duration: "876000h",
         });
         if (banError) {
+          console.error("Erreur ban updateUserById:", banError);
           return new Response(
-            JSON.stringify({ error: `Erreur ban updateUserById : ${banError.message}` }),
+            JSON.stringify({ error: "Échec de la suspension du compte utilisateur." }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
       } catch (banEx: any) {
+        console.error("Exception banUser:", banEx);
         return new Response(
-          JSON.stringify({ error: `Exception banUser : ${banEx.message}` }),
+          JSON.stringify({ error: "Erreur lors de la suspension du compte." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -121,14 +150,16 @@ Deno.serve(async (req: Request) => {
           ban_duration: "none",
         });
         if (unbanError) {
+          console.error("Erreur unban updateUserById:", unbanError);
           return new Response(
-            JSON.stringify({ error: `Erreur unban updateUserById : ${unbanError.message}` }),
+            JSON.stringify({ error: "Échec de la réactivation du compte utilisateur." }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
       } catch (unbanEx: any) {
+        console.error("Exception unbanUser:", unbanEx);
         return new Response(
-          JSON.stringify({ error: `Exception unbanUser : ${unbanEx.message}` }),
+          JSON.stringify({ error: "Erreur lors de la réactivation du compte." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -157,8 +188,9 @@ Deno.serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
+    console.error("Erreur serveur globale toggle-teacher-status:", err);
     return new Response(
-      JSON.stringify({ error: `Erreur serveur globale : ${err?.message || err}` }),
+      JSON.stringify({ error: "Une erreur interne est survenue lors de l'opération." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
