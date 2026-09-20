@@ -22,6 +22,7 @@ import { ClassFinancialReportPage } from "./pages/finance/ClassFinancialReportPa
 import { AdminGradesPage } from "./pages/grades/AdminGradesPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
+import { MailIcon, LockIcon, EyeIcon, EyeOffIcon } from "./components/ui/Icons";
 
 type Profile = {
   id: string;
@@ -34,6 +35,8 @@ type Profile = {
 const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) => {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -107,15 +110,54 @@ const SetPasswordScreen: React.FC<{ onSuccess: () => void }> = ({ onSuccess }) =
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate uppercase mb-1">Nouveau mot de passe</label>
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
-                    placeholder="Minimum 10 caractères (maj, min, chiffre, symbole)" required minLength={10} />
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate">
+                      <LockIcon className="w-4 h-4" />
+                    </span>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-9 pr-10 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
+                      placeholder="Minimum 10 caractères (maj, min, chiffre, symbole)"
+                      required
+                      minLength={10}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate hover:text-ink focus:outline-none"
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    >
+                      {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate uppercase mb-1">Confirmer le mot de passe</label>
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
-                    placeholder="Répétez le mot de passe" required />
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate">
+                      <LockIcon className="w-4 h-4" />
+                    </span>
+                    <input
+                      type={showConfirm ? "text" : "password"}
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      className="w-full pl-9 pr-10 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
+                      placeholder="Répétez le mot de passe"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate hover:text-ink focus:outline-none"
+                      tabIndex={-1}
+                      aria-label={showConfirm ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    >
+                      {showConfirm ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <button type="submit" disabled={loading}
                   className="w-full py-2 bg-[#150A5E] hover:bg-opacity-90 text-white rounded text-sm font-semibold transition disabled:opacity-50">
@@ -185,6 +227,7 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -335,28 +378,47 @@ export default function App() {
                 <label className="block text-xs font-semibold text-slate uppercase mb-1">
                   Adresse email
                 </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
-                  placeholder="nom@lefanion.com"
-                  required
-                />
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate">
+                    <MailIcon className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
+                    placeholder="nom@lefanion.com"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate uppercase mb-1">
                   Mot de passe
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
-                  placeholder="••••••••"
-                  required
-                />
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate">
+                    <LockIcon className="w-4 h-4" />
+                  </span>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-9 pr-10 py-2 border border-[#E4E0D6] rounded focus:outline-none focus:ring-1 focus:ring-[#150A5E] bg-[#FAF9F5] text-sm"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate hover:text-ink focus:outline-none"
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  >
+                    {showPassword ? <EyeOffIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <button
