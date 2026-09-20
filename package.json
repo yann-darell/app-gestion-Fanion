@@ -14,9 +14,12 @@
     "electron:dev": "npm run electron:dev --workspace=@fanion/desktop",
     "build:shared": "npm run build --workspace=@fanion/shared",
     "build:desktop": "npm run build --workspace=@fanion/desktop",
-    "build:web": "npm run build --workspace=@fanion/web"
+    "build:web": "npm run build --workspace=@fanion/web",
+    "build:web:teacher": "npm run build:teacher --workspace=@fanion/web"
   },
   "devDependencies": {
+    "md-to-pdf": "^5.2.5",
+    "puppeteer": "^25.11.0",
     "supabase": "^2.114.0",
     "typescript": "^5.5.4"
   }
