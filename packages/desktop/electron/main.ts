@@ -13,9 +13,15 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow() {
+    // Résolution de l'icône : en dev, remonter depuis dist-electron/ ; en prod, app.isPackaged = true
+    const iconPath = isDev
+        ? path.join(__dirname, "../build-resources/icon.ico")
+        : path.join(process.resourcesPath, "build-resources/icon.ico");
+
     const win = new BrowserWindow({
         width: 1280,
         height: 800,
+        icon: iconPath, // Icône Le Fanion — barre des tâches, Alt-Tab, fenêtre
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,

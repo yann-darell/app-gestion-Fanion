@@ -24,6 +24,12 @@
       "dist-electron/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build-resources/icon.ico",
+        "to": "build-resources/icon.ico"
+      }
+    ],
     "win": {
       "target": [
         {
