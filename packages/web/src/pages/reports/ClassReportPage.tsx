@@ -217,6 +217,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         className: clsName,
         periodLabel: pLabel,
         chartImageBase64,
+        isPrimary,
       });
 
       const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });

@@ -1,4 +1,15 @@
-import { CheckIcon, CheckCircleIcon, EyeIcon, DownloadIcon, FileTextIcon, CloseIcon, InfoIcon, AwardIcon } from "../../components/ui/Icons";
+import {
+  CheckIcon,
+  CheckCircleIcon,
+  EyeIcon,
+  DownloadIcon,
+  FileTextIcon,
+  CloseIcon,
+  InfoIcon,
+  AwardIcon,
+  TrashIcon,
+  EditIcon,
+} from "../../components/ui/Icons";
 import React, { useEffect, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -10,6 +21,8 @@ import {
   getStudentFeeOverride,
   getStudentPayments,
   createPayment,
+  deletePayment,
+  updatePayment,
   allocatePaymentToInstallments,
   ClassRecord,
   SchoolYearRecord,
@@ -77,6 +90,66 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
     allocation: AllocationResult;
     activatedNow: boolean;
   } | null>(null);
+
+  // CRUD Paiements : Édition et Suppression
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [editAmount, setEditAmount] = useState<number | "">("");
+  const [editDate, setEditDate] = useState<string>("");
+  const [editMethod, setEditMethod] = useState<"cash" | "bank_transfer" | "mobile_money" | "check">("cash");
+  const [editCategory, setEditCategory] = useState<"registration" | "tuition">("tuition");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [deletingPayment, setDeletingPayment] = useState<Payment | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
+
+  const handleOpenEdit = (p: Payment) => {
+    setEditingPayment(p);
+    setEditAmount(Number(p.amount));
+    setEditDate(p.payment_date);
+    setEditMethod(p.method);
+    setEditCategory(p.payment_category || "tuition");
+  };
+
+  const handleConfirmEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment) return;
+    if (!editAmount || Number(editAmount) <= 0) {
+      alert("Veuillez saisir un montant valide.");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await updatePayment(editingPayment.id, {
+        amount: Number(editAmount),
+        payment_date: editDate,
+        method: editMethod,
+        payment_category: editCategory,
+      });
+      setEditingPayment(null);
+      await loadStudentFinanceDetails();
+    } catch (err: any) {
+      console.error("Erreur modification paiement:", err);
+      alert(err?.message || "Erreur lors de la modification du paiement.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingPayment) return;
+    setDeletingLoading(true);
+    try {
+      await deletePayment(deletingPayment.id);
+      setDeletingPayment(null);
+      await loadStudentFinanceDetails();
+    } catch (err: any) {
+      console.error("Erreur suppression paiement:", err);
+      alert(err?.message || "Erreur lors de la suppression du paiement.");
+    } finally {
+      setDeletingLoading(false);
+    }
+  };
 
   const isAuthorized = userRole === "principal" || userRole === "directeur_etudes";
 
@@ -498,19 +571,41 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                   {paymentsHistory.map((p) => (
                     <div
                       key={p.id}
-                      className="p-2 border border-line rounded bg-paper text-xs flex justify-between items-center"
+                      className="p-2 border border-line rounded bg-paper text-xs flex justify-between items-center gap-2 hover:border-slate/40 transition"
                     >
-                      <div>
-                        <div className="font-bold text-ink">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-ink truncate">
                           Reçu N°{p.receipt_number} — {formatAmount(Number(p.amount))} FCFA
                         </div>
                         <div className="text-[11px] text-slate font-mono">
                           {p.payment_date} • {p.payment_category === "registration" ? "Inscription" : "Scolarité"}
                         </div>
                       </div>
-                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 bg-slate/10 text-slate rounded">
-                        {p.method}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] uppercase font-semibold px-2 py-0.5 bg-slate/10 text-slate rounded">
+                          {p.method}
+                        </span>
+                        {isAuthorized && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(p)}
+                              title="Modifier ce paiement"
+                              className="p-1 text-slate hover:text-ink hover:bg-white rounded border border-transparent hover:border-line transition"
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPayment(p)}
+                              title="Supprimer / Annuler ce paiement"
+                              className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded border border-transparent hover:border-rose-200 transition"
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -822,6 +917,178 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                 className="w-full h-full rounded border-0"
                 title="Aperçu Reçu PDF"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'Édition d'un Paiement */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-line">
+            <div className="p-4 bg-ink text-white flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm flex items-center gap-2">
+                <EditIcon className="w-4 h-4" /> Modifier le paiement N°{editingPayment.receipt_number}
+              </h3>
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="w-7 h-7 rounded hover:bg-white/20 flex items-center justify-center transition"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmEdit} className="p-5 space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs">
+                ⚠️ <strong>Attention :</strong> La modification du montant ou de la catégorie ajuste l'enregistrement en base et réactualise l'historique et le solde de l'élève.
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Catégorie
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value as "registration" | "tuition")}
+                  className="w-full px-3 py-2 border border-line rounded text-xs bg-white text-ink focus:outline-none focus:border-ink font-sans"
+                >
+                  <option value="registration">Frais d'inscription</option>
+                  <option value="tuition">Frais de scolarité</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Montant (FCFA) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value ? Number(e.target.value) : "")}
+                  className="w-full px-3 py-2 border border-line rounded text-xs text-ink focus:outline-none focus:border-ink font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Date du versement *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-line rounded text-xs text-ink focus:outline-none focus:border-ink"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Mode de règlement
+                </label>
+                <select
+                  value={editMethod}
+                  onChange={(e) =>
+                    setEditMethod(
+                      e.target.value as "cash" | "bank_transfer" | "mobile_money" | "check"
+                    )
+                  }
+                  className="w-full px-3 py-2 border border-line rounded text-xs bg-white text-ink focus:outline-none focus:border-ink font-sans"
+                >
+                  <option value="cash">Espèces</option>
+                  <option value="bank_transfer">Virement bancaire</option>
+                  <option value="mobile_money">Mobile Money (Orange/MTN)</option>
+                  <option value="check">Chèque</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayment(null)}
+                  disabled={savingEdit}
+                  className="px-4 py-2 border border-line rounded text-xs font-medium text-slate hover:bg-paper transition"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 bg-ink text-white rounded text-xs font-bold hover:bg-opacity-90 transition disabled:opacity-50"
+                >
+                  {savingEdit ? "Enregistrement..." : "Valider la modification"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modale de Confirmation de Suppression d'un Paiement */}
+      {deletingPayment && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden border border-line">
+            <div className="p-4 bg-rose-700 text-white flex items-center justify-between">
+              <h3 className="font-display font-bold text-sm flex items-center gap-2">
+                <TrashIcon className="w-4 h-4" /> Annuler ce versement
+              </h3>
+              <button
+                onClick={() => setDeletingPayment(null)}
+                className="w-7 h-7 rounded hover:bg-white/20 flex items-center justify-center transition"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-ink">
+                Êtes-vous certain de vouloir annuler le versement suivant ?
+              </p>
+
+              <div className="p-3 bg-paper border border-line rounded text-xs space-y-1 font-mono">
+                <div>
+                  <span className="text-slate">Reçu :</span>{" "}
+                  <strong>N°{deletingPayment.receipt_number}</strong>
+                </div>
+                <div>
+                  <span className="text-slate">Montant :</span>{" "}
+                  <strong className="text-rose-600">
+                    {formatAmount(Number(deletingPayment.amount))} FCFA
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate">Date :</span> {deletingPayment.payment_date}
+                </div>
+                <div>
+                  <span className="text-slate">Catégorie :</span>{" "}
+                  {deletingPayment.payment_category === "registration" ? "Inscription" : "Scolarité"}
+                </div>
+              </div>
+
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[11px]">
+                Cette action supprimera la ligne de paiement ainsi que le reçu PDF stocké. Les calculs de solde de l'élève seront automatiquement réajustés.
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setDeletingPayment(null)}
+                  disabled={deletingLoading}
+                  className="px-4 py-2 border border-line rounded text-xs font-medium text-slate hover:bg-paper transition"
+                >
+                  Retour
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deletingLoading}
+                  className="px-4 py-2 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition disabled:opacity-50"
+                >
+                  {deletingLoading ? "Suppression..." : "Confirmer la suppression"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

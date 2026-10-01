@@ -536,7 +536,30 @@ export async function deletePayment(paymentId: string): Promise<void> {
 }
 
 /**
+ * Met à jour un paiement existant (montant, date, méthode, catégorie).
+ */
+export async function updatePayment(
+  paymentId: string,
+  updates: {
+    amount?: number;
+    payment_date?: string;
+    method?: Payment["method"];
+    payment_category?: Payment["payment_category"];
+  }
+): Promise<void> {
+  const { error } = await supabase
+    .from("payments")
+    .update(updates)
+    .eq("id", paymentId);
+
+  if (error) {
+    throw new Error(`Erreur lors de la modification du paiement: ${error.message}`);
+  }
+}
+
+/**
  * Compte le nombre total de paiements déjà enregistrés pour une classe donnée et une année scolaire donnée.
+
  * Utilisé pour avertir l'utilisateur si un tarif est modifié alors que des paiements existent déjà.
  */
 export async function getClassPaymentsCount(

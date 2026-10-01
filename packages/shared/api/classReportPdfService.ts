@@ -2,12 +2,14 @@ import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
 import { ClassReportData } from "../services/classReportService";
 import { getSchoolSettings, SchoolSettings } from "../services/settingsService";
 import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
+import { LOGO_PRIMAIRE_BASE64 } from "../assets/logoPrimaireBase64";
 
 export interface GenerateClassReportPdfOptions {
   reportData: ClassReportData;
   className: string;
   periodLabel: string;
   chartImageBase64?: string | null; // Image PNG du graphique de distribution capturée depuis le DOM
+  isPrimary?: boolean;
 }
 
 /**
@@ -119,7 +121,7 @@ function drawNativeBarChart(
 export async function generateClassReportPdf(
   options: GenerateClassReportPdfOptions
 ): Promise<Uint8Array> {
-  const { reportData, className, periodLabel, chartImageBase64 } = options;
+  const { reportData, className, periodLabel, chartImageBase64, isPrimary } = options;
   const settings: SchoolSettings = await getSchoolSettings();
 
   // Dimensions A4 Paysage : 841.89 pt x 595.28 pt
@@ -138,14 +140,20 @@ export async function generateClassReportPdf(
   const emeraldColor = rgb(0.06, 0.5, 0.25);
   const roseColor = rgb(0.75, 0.15, 0.15);
 
-  // Logo officiel Le Fanion
+  // Logo officiel Le Fanion (primaire ou collège)
   let logoImage: any = null;
   try {
-    const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
-    const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-    logoImage = await pdfDoc.embedPng(logoBuffer);
+    if (isPrimary) {
+      const base64Data = LOGO_PRIMAIRE_BASE64.replace(/^data:image\/jpeg;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedJpg(logoBuffer);
+    } else {
+      const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedPng(logoBuffer);
+    }
   } catch (e) {
-    console.warn("Avertissement: Logo Le Fanion non chargé sur le bordereau:", e);
+    console.warn("Avertissement: Logo non chargé sur le bordereau:", e);
   }
 
   // Image capturée du graphique (Recharts DOM) si fournie
