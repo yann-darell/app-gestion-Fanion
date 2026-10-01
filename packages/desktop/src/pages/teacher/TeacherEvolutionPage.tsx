@@ -18,7 +18,6 @@ import {
   listGrades,
   TeacherAssignmentRecord,
   SequenceRecord,
-  GradeRecord,
   AssignedStudentRecord,
   useSelectionPersistence,
 } from "@fanion/shared";

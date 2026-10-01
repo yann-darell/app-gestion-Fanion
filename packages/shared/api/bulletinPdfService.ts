@@ -91,17 +91,42 @@ export async function createStudentBulletinPdfBuffer(
 
   // Récupérer le libellé de la période (Terme ou Séquence)
   let periodTitleLabel = periodType === "term" ? "TRIMESTRE" : "SÉQUENCE";
+  let termSequencesInfo: { label: string; average: number | null }[] = [];
+
   if (periodType === "term") {
     const { data: termData } = await supabase.from("terms").select("label").eq("id", periodId).single();
     if (termData?.label) {
       periodTitleLabel = termData.label.toUpperCase();
     }
+
+    // Récupérer les séquences de ce trimestre pour afficher leurs moyennes dans le bloc de synthèse
+    try {
+      const { data: seqs } = await supabase
+        .from("sequences")
+        .select("id, label, order_index")
+        .eq("term_id", periodId)
+        .order("order_index", { ascending: true });
+
+      if (seqs && seqs.length > 0) {
+        for (const seq of seqs) {
+          const sRep = await generateClassReport(classId, "sequence", seq.id);
+          const sRow = sRep.rows.find((r) => r.student.id === studentId);
+          const shortLabel = seq.label ? seq.label.replace(/^Séquence\s*/i, "SEQ ") : `SEQ ${seq.order_index}`;
+          termSequencesInfo.push({
+            label: shortLabel.toUpperCase(),
+            average: sRow && sRow.average !== null ? sRow.average : null,
+          });
+        }
+      }
+    } catch (tSeqErr) {
+      console.warn("Impossible de charger les moyennes séquentielles du trimestre:", tSeqErr);
+    }
   } else {
-    const { data: seqData } = await supabase.from("sequences").select("name, sequence_number").eq("id", periodId).single();
-    if (seqData?.name) {
-      periodTitleLabel = seqData.name.toUpperCase();
-    } else if (seqData?.sequence_number) {
-      periodTitleLabel = `${seqData.sequence_number}ème SÉQUENCE`;
+    const { data: seqData } = await supabase.from("sequences").select("label, order_index").eq("id", periodId).single();
+    if (seqData?.label) {
+      periodTitleLabel = seqData.label.toUpperCase();
+    } else if (seqData?.order_index) {
+      periodTitleLabel = `${seqData.order_index}ème SÉQUENCE`;
     }
   }
 
@@ -628,13 +653,24 @@ export async function createStudentBulletinPdfBuffer(
     color: rgb(1, 1, 1),
   });
 
-  // Col 1 Contenu (Aéré sur 48pt)
-  page.drawText(`Moyennes de l'Élève :   ${periodTitleLabel} : ${formatFr(studentRow.average)}/20`, {
+  // Col 1 Contenu (Aéré sur 48pt) : Affichage des Séquences et de la Période
+  let periodLineText = "";
+  if (periodType === "term") {
+    const seqsSummary = termSequencesInfo.length > 0
+      ? termSequencesInfo.map((s) => `${s.label} : ${formatFr(s.average)}`).join("    ")
+      : "";
+    periodLineText = `Moyennes de l'Élève :   ${seqsSummary ? `${seqsSummary}    ` : ""}${periodTitleLabel} : ${formatFr(studentRow.average)}/20`;
+  } else {
+    periodLineText = `Moyennes de l'Élève :   ${periodTitleLabel} : ${formatFr(studentRow.average)}/20`;
+  }
+
+  page.drawText(periodLineText, {
     x: marginX + 10,
     y: tableY - 17,
     size: 8.5,
     font: fontBold,
   });
+
   page.drawText(`Trim 1 : ${periodType === "term" ? formatFr(studentRow.average) : "--"}    Trim 2 : --    Trim 3 : --    ANNUEL : ${formatFr(studentRow.average)}/20`, {
     x: marginX + 10,
     y: tableY - 34,

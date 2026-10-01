@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { supabase } from "./supabaseClient";
 import { Payment, allocatePaymentToInstallments } from "./financeService";
 import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
+import { LOGO_PRIMAIRE_BASE64 } from "../assets/logoPrimaireBase64";
 
 /**
  * Structure interne utilisée par le template PDF pour afficher le tableau des tranches.
@@ -46,7 +47,7 @@ export async function createReceiptPdfBuffer(
   // 1. Récupération des informations de l'élève et de sa classe
   const { data: student } = await supabase
     .from("students")
-    .select("*, classes(name, level)")
+    .select("*, classes(name, level, division_id)")
     .eq("id", payment.student_id)
     .single();
 
@@ -150,20 +151,39 @@ export async function createReceiptPdfBuffer(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-  // 3. Charger le logo officiel PNG via Base64 embarqué (compatible Web, Electron .exe et Node)
+  // 3. Détection de la division (primaire vs collège)
+  const isPrimary = student?.classes?.division_id === "primaire";
+
+  // 4. Charger le logo officiel selon la division
   let logoImage: any = null;
   try {
-    const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
-    const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-    logoImage = await pdfDoc.embedPng(logoBuffer);
+    if (isPrimary) {
+      const base64Data = LOGO_PRIMAIRE_BASE64.replace(/^data:image\/jpeg;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedJpg(logoBuffer);
+    } else {
+      const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedPng(logoBuffer);
+    }
   } catch (e) {
-    console.warn("Avertissement: Logo PNG non chargé sur le reçu:", e);
+    console.warn("Avertissement: Logo non chargé sur le reçu:", e);
   }
 
-  const inkColor = rgb(0.082, 0.039, 0.368); // #150A5E
+  // Palette de couleurs : Verte & Cyan pour le Primaire, Indigo pour le Collège
+  const inkColor = isPrimary
+    ? rgb(0.176, 0.416, 0.176) // #2D6A2D Vert forêt
+    : rgb(0.082, 0.039, 0.368); // #150A5E Indigo Fanion
+  const accentColor = isPrimary
+    ? rgb(0.0, 0.651, 0.706) // #00A6B4 Cyan lagon
+    : rgb(0.356, 0.419, 0.51); // #5B6B82 Slate
   const slateColor = rgb(0.356, 0.419, 0.51); // #5B6B82
-  const lineColor = rgb(0.894, 0.878, 0.839); // #E4E0D6
-  const bgLight = rgb(0.96, 0.97, 0.99);
+  const lineColor = isPrimary
+    ? rgb(0.796, 0.910, 0.839) // #CBE8D6 Filet vert doux
+    : rgb(0.894, 0.878, 0.839); // #E4E0D6
+  const bgLight = isPrimary
+    ? rgb(0.922, 0.969, 0.941) // #EBF7F0
+    : rgb(0.96, 0.97, 0.99);
 
   // Cadre global du reçu
   page.drawRectangle({
@@ -176,14 +196,14 @@ export async function createReceiptPdfBuffer(
     color: rgb(1, 1, 1),
   });
 
-  // Filigrane logo centré sur toute la page (Point 6)
+  // Filigrane logo centré sur toute la page
   if (logoImage) {
     page.drawImage(logoImage, {
       x: width / 2 - 100,
       y: height / 2 - 100,
       width: 200,
       height: 200,
-      opacity: 0.07, // Discret mais présent sur le reçu
+      opacity: isPrimary ? 0.09 : 0.07,
     });
   }
 
@@ -201,11 +221,15 @@ export async function createReceiptPdfBuffer(
     });
   }
 
-  // Identité de l'école
-  page.drawText("COLLÈGE PRIVÉ LAÏC LE FANION", {
+  // Identité de l'école (Collège ou Primaire)
+  const schoolTitle = isPrimary
+    ? "COMPLEXE SCOLAIRE BILINGUE LA GRÂCE"
+    : "COLLÈGE PRIVÉ LAÏQUE LE FANION";
+
+  page.drawText(schoolTitle, {
     x: 90,
     y: headerY - 5,
-    size: 11,
+    size: isPrimary ? 10.5 : 11,
     font: fontBold,
     color: inkColor,
   });
@@ -214,7 +238,7 @@ export async function createReceiptPdfBuffer(
     y: headerY - 18,
     size: 8,
     font: fontItalic,
-    color: slateColor,
+    color: isPrimary ? accentColor : slateColor,
   });
   page.drawText("BP 1234 Yaoundé - Tél : 696 81 07 22 / 690 54 95 99", {
     x: 90,
@@ -522,7 +546,8 @@ export async function createReceiptPdfBuffer(
     color: slateColor,
   });
 
-  page.drawText("Le Principal", {
+  const signatureTitle = isPrimary ? "La Direction" : "Le Principal";
+  page.drawText(signatureTitle, {
     x: width - 175,
     y: footerY - 16,
     size: 9.5,

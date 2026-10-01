@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   listClasses,
+  deleteClass,
   ClassRecord,
   supabase,
 } from "@fanion/shared";
@@ -40,7 +41,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
       });
       setSchoolYears(syMap);
     } catch (err: any) {
-      console.error("Erreur de chargement des classes desktop:", err);
+      console.error("Erreur de chargement des classes:", err);
       setError("Impossible de charger la liste des classes.");
     } finally {
       setLoading(false);
@@ -56,11 +57,23 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
     setIsModalOpen(true);
   };
 
+  const handleDeleteClick = async (cls: ClassRecord) => {
+    if (window.confirm(`Voulez-vous vraiment supprimer la classe "${cls.name}" ?\nAttention : Si des élèves ou des notes y sont attachés, la suppression pourrait échouer.`)) {
+      try {
+        await deleteClass(cls.id);
+        fetchClassesData();
+      } catch (err: any) {
+        alert("Erreur lors de la suppression de la classe : " + (err.message || ""));
+      }
+    }
+  };
+
   const handleCreateClick = () => {
     setEditingClass(null);
     setIsModalOpen(true);
   };
 
+  /* ─── Filter pills ─── */
   const filters = [
     { key: "all", label: "Toutes" },
     { key: "college", label: "Collège" },
@@ -69,6 +82,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      {/* ── Header ── */}
       <div className="flex flex-col gap-4 pb-4 border-b border-line mb-6">
         <div className="flex items-center justify-between min-h-[40px]">
           <h1 className="font-display text-xl md:text-2xl font-semibold text-ink leading-tight">
@@ -99,6 +113,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
         </div>
       </div>
 
+      {/* ── Division Filter ── */}
       <div className="flex items-center gap-2 mb-6 p-2 bg-paper-dark rounded border border-line overflow-x-auto">
         <span className="text-[10px] font-semibold text-slate uppercase tracking-wider px-2 flex-shrink-0">
           Division :
@@ -118,12 +133,14 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
         ))}
       </div>
 
+      {/* ── Error ── */}
       {error && (
         <div className="mb-6 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-sm text-signal-red font-medium">
           {error}
         </div>
       )}
 
+      {/* ── Content ── */}
       {loading ? (
         <div className="py-12 text-center text-sm font-medium text-slate">
           Chargement…
@@ -144,6 +161,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
         </div>
       ) : (
         <>
+          {/* ── Desktop Table (hidden on mobile) ── */}
           <div className="hidden md:block w-full overflow-x-auto border border-line rounded">
             <table className="w-full border-collapse text-left">
               <thead className="bg-paper-dark text-ink border-b border-line sticky top-0 z-10">
@@ -207,25 +225,36 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
                     </td>
                     {isWriteAuthorized && (
                       <td className="px-4 py-2.5 text-right">
-                        <button
-                          onClick={() => handleEditClick(cls)}
-                          className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
-                          title="Modifier"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEditClick(cls)}
+                            className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
+                            title="Modifier"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(cls)}
+                            className="p-1.5 text-slate hover:text-signal-red hover:bg-signal-red/10 rounded transition"
+                            title="Supprimer"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -234,6 +263,7 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
             </table>
           </div>
 
+          {/* ── Mobile Card List (hidden on desktop) ── */}
           <div className="md:hidden flex flex-col gap-3">
             {classes.map((cls) => (
               <div
@@ -269,25 +299,36 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
                   </p>
                 </div>
                 {isWriteAuthorized && (
-                  <button
-                    onClick={() => handleEditClick(cls)}
-                    className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition flex-shrink-0"
-                    title="Modifier"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleEditClick(cls)}
+                      className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition"
+                      title="Modifier"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                      />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(cls)}
+                      className="p-2 text-slate hover:text-signal-red hover:bg-signal-red/10 rounded transition"
+                      title="Supprimer"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

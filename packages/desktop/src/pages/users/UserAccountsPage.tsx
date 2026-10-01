@@ -1,6 +1,30 @@
 import { CloseIcon } from "../../components/ui/Icons";
 import React, { useState, useEffect } from "react";
-import { inviteTeacher, listUsers, updateUser, deleteUser, UserProfile } from "@fanion/shared";
+import { 
+  inviteTeacher, 
+  createFictitiousTeacher,
+  resetFictitiousPassword,
+  listUsers, 
+  updateUser, 
+  deleteUser, 
+  toggleTeacherStatus, 
+  UserProfile 
+} from "@fanion/shared";
+import { DeactivateUserModal } from "../settings/components/DeactivateUserModal";
+
+function generateFictitiousEmail(fullName: string): string {
+  return (
+    fullName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Supprime les accents
+      .replace(/[\s\-_]+/g, ".")       // Espaces, tirets -> points
+      .replace(/[^a-z0-9.]/g, "")      // Supprime les caractères spéciaux
+      .replace(/\.+/g, ".")            // Double points -> simple point
+      .replace(/^\.+|\.+$/g, "")       // Trim les points en début/fin
+    + "@fanion-ecole.local"
+  );
+}
 
 interface UserAccountsPageProps {
   userRole?: string;
@@ -17,6 +41,23 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
   const [fullName, setFullName] = useState("");
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // État toggle compte fictif
+  const [isFictitiousMode, setIsFictitiousMode] = useState(false);
+  const [fictitiousEmail, setFictitiousEmail] = useState("");
+
+  // État modal identifiants (affiché après création d'un compte fictif)
+  const [fictitiousCredentials, setFictitiousCredentials] = useState<{
+    fullName: string;
+    email: string;
+    password: string;
+  } | null>(null);
+
+  // État reset mot de passe fictif
+  const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   // Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -35,7 +76,53 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
   const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Toggle Activation State
+  const [selectedTeacherForDeactivation, setSelectedTeacherForDeactivation] = useState<UserProfile | null>(null);
+  const [submittingToggleId, setSubmittingToggleId] = useState<string | null>(null);
+
   const isAuthorized = userRole === "principal" || userRole === "directeur_etudes";
+
+  const handleToggleClick = async (u: UserProfile) => {
+    if (u.role === "principal" || u.role === "directeur_etudes") return;
+    const isActive = u.is_active !== false;
+    if (isActive) {
+      setSelectedTeacherForDeactivation(u);
+    } else {
+      setSubmittingToggleId(u.id);
+      setUserError(null);
+      setGlobalSuccess(null);
+      try {
+        await toggleTeacherStatus(u.id, true);
+        setGlobalSuccess(`Le compte de ${u.full_name} a été réactivé avec succès.`);
+        await fetchUsersList();
+      } catch (err: any) {
+        console.error("Erreur réactivation enseignant:", err);
+        setUserError(err?.message || "Échec de la réactivation du compte.");
+      } finally {
+        setSubmittingToggleId(null);
+      }
+    }
+  };
+
+  const handleConfirmDeactivation = async () => {
+    if (!selectedTeacherForDeactivation) return;
+    const u = selectedTeacherForDeactivation;
+    setSubmittingToggleId(u.id);
+    setUserError(null);
+    setGlobalSuccess(null);
+
+    try {
+      await toggleTeacherStatus(u.id, false);
+      setGlobalSuccess(`Le compte de ${u.full_name} a été désactivé et sa session a été révoquée immédiatement.`);
+      setSelectedTeacherForDeactivation(null);
+      await fetchUsersList();
+    } catch (err: any) {
+      console.error("Erreur désactivation enseignant:", err);
+      setUserError(err?.message || "Échec de la désactivation du compte.");
+    } finally {
+      setSubmittingToggleId(null);
+    }
+  };
 
   const fetchUsersList = async () => {
     try {
@@ -44,7 +131,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
       const data = await listUsers();
       setUsers(data);
     } catch (err: any) {
-      console.error("Erreur chargement utilisateurs desktop:", err);
+      console.error("Erreur chargement utilisateurs:", err);
       setUserError(err?.message || "Impossible de charger la liste des comptes.");
     } finally {
       setLoadingUsers(false);
@@ -59,27 +146,55 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !fullName) return;
+    if (!fullName) return;
+    if (!isFictitiousMode && !email) return;
 
     try {
       setInviting(true);
       setInviteError(null);
       setGlobalSuccess(null);
 
-      const response = await inviteTeacher(email, fullName);
-      setGlobalSuccess(
-        response.message || `L'invitation a été envoyée avec succès à ${email}.`
-      );
+      if (isFictitiousMode) {
+        const emailToUse = fictitiousEmail || generateFictitiousEmail(fullName);
+        const response = await createFictitiousTeacher(emailToUse, fullName);
+        // Afficher la modal avec les identifiants générés
+        setFictitiousCredentials({
+          fullName: response.user.full_name,
+          email: response.user.email,
+          password: response.generated_password,
+        });
+      } else {
+        const response = await inviteTeacher(email, fullName);
+        setGlobalSuccess(
+          response.message || `L'invitation a été envoyée avec succès à ${email}.`
+        );
+      }
 
       setEmail("");
       setFullName("");
+      setIsFictitiousMode(false);
+      setFictitiousEmail("");
 
       await fetchUsersList();
     } catch (err: any) {
-      console.error("Erreur invitation enseignant desktop:", err);
-      setInviteError(err?.message || "Échec de l'envoi de l'invitation.");
+      console.error("Erreur création enseignant:", err);
+      setInviteError(err?.message || "Échec de la création du compte.");
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return;
+    try {
+      setResetting(true);
+      setResetError(null);
+      const result = await resetFictitiousPassword(resetTarget.id);
+      setResetResult(result.generated_password);
+    } catch (err: any) {
+      setResetError(err?.message || "Échec de la réinitialisation.");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -111,7 +226,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
       setEditingUser(null);
       await fetchUsersList();
     } catch (err: any) {
-      console.error("Erreur mise à jour utilisateur desktop:", err);
+      console.error("Erreur mise à jour utilisateur:", err);
       setEditError(err?.message || "Échec de la mise à jour du compte.");
     } finally {
       setUpdating(false);
@@ -121,6 +236,12 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
   const handleDelete = async () => {
     if (!deletingUser) return;
 
+    if (deletingUser.role === "principal" || deletingUser.role === "directeur_etudes") {
+      setUserError("Les comptes de la Direction (Principal et Dir. des Études) ne peuvent pas être supprimés.");
+      setDeletingUser(null);
+      return;
+    }
+
     try {
       setDeleting(true);
       await deleteUser(deletingUser.id);
@@ -128,7 +249,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
       setDeletingUser(null);
       await fetchUsersList();
     } catch (err: any) {
-      console.error("Erreur suppression utilisateur desktop:", err);
+      console.error("Erreur suppression utilisateur:", err);
       setUserError(err?.message || "Échec de la suppression du compte.");
     } finally {
       setDeleting(false);
@@ -148,6 +269,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
     );
   }
 
+  // Filtered Users
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -189,6 +311,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+      {/* Header */}
       <div className="pb-4 border-b border-line flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
           <h1 className="font-display text-xl md:text-2xl font-bold text-ink">
@@ -218,8 +341,9 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
         </div>
       )}
 
+      {/* Grid Invitation Form + Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Invitation Form */}
+        {/* Invitation Form Card */}
         <div className="lg:col-span-1 bg-white border border-line rounded p-5 shadow-sm h-fit">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-line">
             <svg
@@ -254,78 +378,110 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
               <input
                 type="text"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => {
+                  setFullName(e.target.value);
+                  if (isFictitiousMode) {
+                    setFictitiousEmail(generateFictitiousEmail(e.target.value));
+                  }
+                }}
                 placeholder="Ex: Alain MBIDA"
                 className="w-full px-3 py-2 border border-line rounded text-sm bg-paper text-ink focus:outline-none focus:border-ink font-medium"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate uppercase mb-1">
-                Adresse Email *
+            {/* Toggle compte fictif */}
+            <div className="flex items-center gap-2 py-1">
+              <button
+                type="button"
+                id="toggle-fictitious"
+                onClick={() => {
+                  const next = !isFictitiousMode;
+                  setIsFictitiousMode(next);
+                  if (next && fullName) {
+                    setFictitiousEmail(generateFictitiousEmail(fullName));
+                  } else {
+                    setFictitiousEmail("");
+                  }
+                }}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  isFictitiousMode ? "bg-amber-500" : "bg-slate/30"
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+                    isFictitiousMode ? "translate-x-4" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <label
+                htmlFor="toggle-fictitious"
+                className="text-xs font-medium text-slate cursor-pointer select-none"
+              >
+                Cet enseignant n'a pas d'email
               </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="enseignant@lefanion.com"
-                className="w-full px-3 py-2 border border-line rounded text-sm bg-paper text-ink focus:outline-none focus:border-ink font-medium"
-                required
-              />
             </div>
+
+            {isFictitiousMode ? (
+              /* Mode fictif : email auto-généré non-modifiable */
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Email généré automatiquement
+                </label>
+                <div className="w-full px-3 py-2 border border-amber-300 bg-amber-50 rounded text-sm font-mono text-amber-900 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="truncate">{fictitiousEmail || "Saisir le nom d'abord..."}</span>
+                </div>
+                <p className="text-[11px] text-amber-700 mt-1 italic">
+                  Email fictif auto-généré — ne nécessite pas de boîte mail réelle.
+                </p>
+              </div>
+            ) : (
+              /* Mode normal : email saisi manuellement */
+              <div>
+                <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                  Adresse Email *
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="enseignant@lefanion.com"
+                  className="w-full px-3 py-2 border border-line rounded text-sm bg-paper text-ink focus:outline-none focus:border-ink font-medium"
+                  required
+                />
+              </div>
+            )}
 
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={inviting || !email || !fullName}
-                className="w-full py-2.5 bg-ink hover:bg-opacity-90 text-white rounded text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={inviting || !fullName || (!isFictitiousMode && !email) || (isFictitiousMode && !fictitiousEmail)}
+                className={`w-full py-2.5 text-white rounded text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2 ${
+                  isFictitiousMode
+                    ? "bg-amber-500 hover:bg-amber-600"
+                    : "bg-ink hover:bg-opacity-90"
+                }`}
               >
                 {inviting ? (
                   <>
-                    <svg
-                      className="animate-spin h-4 w-4 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Envoi de l'invitation...</span>
+                    <span>{isFictitiousMode ? "Création..." : "Envoi de l'invitation..."}</span>
                   </>
                 ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <span>Envoyer l'invitation</span>
-                  </>
+                  <span>{isFictitiousMode ? "Créer le compte fictif" : "Envoyer l'invitation"}</span>
                 )}
               </button>
             </div>
             <p className="text-[11px] text-slate italic leading-tight text-center">
-              Un email d'invitation sera envoyé automatiquement à l'enseignant pour lui permettre de configurer son mot de passe.
+              {isFictitiousMode
+                ? "Un mot de passe sera généré et affiché une seule fois après la création."
+                : "Un email d'invitation sera envoyé automatiquement à l'enseignant."}
             </p>
           </form>
         </div>
@@ -462,6 +618,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                               <th className="px-4 py-3">Nom complet</th>
                               <th className="px-4 py-3">Email</th>
                               <th className="px-4 py-3">Rôle</th>
+                              <th className="px-4 py-3">Statut</th>
                               <th className="px-4 py-3">Division</th>
                               <th className="px-4 py-3 text-right">Actions</th>
                             </tr>
@@ -475,14 +632,59 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                     {u.full_name}
                                   </td>
                                   <td className="px-4 py-3 text-xs font-mono text-slate">
-                                    {u.email || "— non renseigné —"}
+                                    <div className="flex items-center gap-1.5">
+                                      <span>{u.email || "— non renseigné —"}</span>
+                                      {u.is_fictitious && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 flex-shrink-0">
+                                          Fictif
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-4 py-3">{getRoleBadge(u.role)}</td>
+                                  <td className="px-4 py-3">
+                                    <span
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                        u.is_active !== false ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${u.is_active !== false ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                      {u.is_active !== false ? "Actif" : "Inactif"}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-3 text-xs text-slate">
                                     {u.division_scope ? u.division_scope.toUpperCase() : "Toutes"}
                                   </td>
                                   <td className="px-4 py-3 text-right">
                                     <div className="flex items-center justify-end gap-2">
+                                      {u.is_fictitious && (
+                                        <button
+                                          onClick={() => { setResetTarget(u); setResetResult(null); setResetError(null); }}
+                                          className="px-2 py-1 text-xs font-medium bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded text-amber-700 transition flex items-center gap-1"
+                                          title="Réinitialiser le mot de passe"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                          </svg>
+                                          <span>Mdp</span>
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => handleToggleClick(u)}
+                                        disabled={submittingToggleId === u.id}
+                                        className={`px-2 py-1 text-xs font-medium rounded transition flex items-center gap-1 ${
+                                          u.is_active !== false
+                                            ? "bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800"
+                                            : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                                        }`}
+                                        title={u.is_active !== false ? "Désactiver cet enseignant" : "Réactiver cet enseignant"}
+                                      >
+                                        {submittingToggleId === u.id
+                                          ? "..."
+                                          : u.is_active !== false
+                                          ? "Désactiver"
+                                          : "Réactiver"}
+                                      </button>
                                       <button
                                         onClick={() => openEditModal(u)}
                                         className="px-2.5 py-1 text-xs font-medium bg-white hover:bg-paper border border-line rounded text-ink transition flex items-center gap-1"
@@ -518,7 +720,21 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                           .map((u) => (
                             <div key={u.id} className="p-3.5 flex flex-col gap-2 bg-white">
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-ink">{u.full_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-ink">{u.full_name}</span>
+                                  {u.is_fictitious && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                      Fictif
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      u.is_active !== false ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                    }`}
+                                  >
+                                    {u.is_active !== false ? "Actif" : "Inactif"}
+                                  </span>
+                                </div>
                                 {getRoleBadge(u.role)}
                               </div>
                               <div className="flex items-center justify-between text-xs text-slate font-mono">
@@ -528,6 +744,25 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                 </span>
                               </div>
                               <div className="flex items-center justify-end gap-2 pt-1 border-t border-line/40">
+                                {u.is_fictitious && (
+                                  <button
+                                    onClick={() => { setResetTarget(u); setResetResult(null); setResetError(null); }}
+                                    className="px-2.5 py-1 text-xs font-medium bg-amber-50 border border-amber-200 rounded text-amber-700"
+                                  >
+                                    Mdp
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleToggleClick(u)}
+                                  disabled={submittingToggleId === u.id}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded ${
+                                    u.is_active !== false
+                                      ? "bg-amber-50 border border-amber-200 text-amber-800"
+                                      : "bg-emerald-600 text-white font-semibold"
+                                  }`}
+                                >
+                                  {submittingToggleId === u.id ? "..." : u.is_active !== false ? "Désactiver" : "Réactiver"}
+                                </button>
                                 <button
                                   onClick={() => openEditModal(u)}
                                   className="px-2.5 py-1 text-xs font-medium bg-paper border border-line rounded text-ink"
@@ -552,6 +787,153 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
           )}
         </div>
       </div>
+
+      {/* MODAL IDENTIFIANTS COMPTE FICTIF */}
+      {fictitiousCredentials && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-white rounded-lg border border-amber-200 max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-amber-100">
+              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-ink">Identifiants de connexion</h3>
+                <p className="text-[11px] text-slate">Remettez ces informations à l'enseignant.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 font-medium flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>Ces identifiants ne seront <strong>plus affichés</strong> après fermeture de cette fenêtre.</span>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-sm font-bold text-ink">{fictitiousCredentials.fullName}</div>
+
+              {[
+                { label: "📧 Email", value: fictitiousCredentials.email },
+                { label: "🔑 Mot de passe", value: fictitiousCredentials.password },
+                { label: "🔗 Lien app", value: "https://app-gestion-fanion.vercel.app" },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-center justify-between gap-2 p-2.5 bg-paper rounded border border-line">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-slate uppercase font-semibold mb-0.5">{label}</p>
+                    <p className="text-xs font-mono text-ink font-semibold truncate">{value}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(value)}
+                    className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold bg-white border border-line rounded hover:bg-paper transition text-slate"
+                    title={`Copier ${label}`}
+                  >
+                    Copier
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-line">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `Nom: ${fictitiousCredentials.fullName}\nEmail: ${fictitiousCredentials.email}\nMot de passe: ${fictitiousCredentials.password}\nLien: https://app-gestion-fanion.vercel.app`;
+                  navigator.clipboard.writeText(text);
+                }}
+                className="px-4 py-2 border border-line rounded text-xs font-semibold text-slate hover:bg-paper transition"
+              >
+                Tout copier
+              </button>
+              <button
+                type="button"
+                onClick={() => setFictitiousCredentials(null)}
+                className="px-4 py-2 bg-ink hover:bg-opacity-90 text-white rounded text-xs font-semibold transition"
+              >
+                J'ai noté — Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RESET MOT DE PASSE FICTIF */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-white rounded-lg border border-line max-w-sm w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <h3 className="font-display font-bold text-base text-ink">Réinitialiser le mot de passe</h3>
+              <button onClick={() => { setResetTarget(null); setResetResult(null); setResetError(null); }} className="text-slate hover:text-ink">
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate">
+              Enseignant : <strong className="text-ink">{resetTarget.full_name}</strong>
+            </p>
+
+            {!resetResult ? (
+              <>
+                <p className="text-xs text-slate leading-relaxed">
+                  Un nouveau mot de passe va être généré. L'ancien sera <strong>immédiatement invalidé</strong>.
+                </p>
+                {resetError && (
+                  <div className="p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
+                    {resetError}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-line">
+                  <button
+                    type="button"
+                    onClick={() => { setResetTarget(null); setResetError(null); }}
+                    className="px-4 py-2 border border-line rounded text-xs font-semibold text-slate hover:bg-paper"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    disabled={resetting}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {resetting ? "Génération..." : "Générer un nouveau mot de passe"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 font-medium">
+                  ✅ Nouveau mot de passe généré avec succès.
+                </div>
+                <div className="flex items-center justify-between gap-2 p-2.5 bg-paper rounded border border-line">
+                  <p className="text-xs font-mono text-ink font-semibold">{resetResult}</p>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(resetResult)}
+                    className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold bg-white border border-line rounded hover:bg-paper transition text-slate"
+                  >
+                    Copier
+                  </button>
+                </div>
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800 font-medium">
+                  ⚠️ Notez-le immédiatement. Il ne sera plus affiché.
+                </div>
+                <div className="flex justify-end pt-2 border-t border-line">
+                  <button
+                    type="button"
+                    onClick={() => { setResetTarget(null); setResetResult(null); }}
+                    className="px-4 py-2 bg-ink hover:bg-opacity-90 text-white rounded text-xs font-semibold transition"
+                  >
+                    J'ai noté — Fermer
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* EDIT USER MODAL */}
       {editingUser && (
@@ -690,6 +1072,15 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
           </div>
         </div>
       )}
+
+      {/* DEACTIVATE USER CONFIRMATION MODAL */}
+      <DeactivateUserModal
+        isOpen={selectedTeacherForDeactivation !== null}
+        teacher={selectedTeacherForDeactivation}
+        onClose={() => setSelectedTeacherForDeactivation(null)}
+        onConfirm={handleConfirmDeactivation}
+        isSubmitting={submittingToggleId === selectedTeacherForDeactivation?.id}
+      />
     </div>
   );
 };

@@ -14,6 +14,7 @@ interface ClassFinancialReportPageProps {
 }
 
 export const ClassFinancialReportPage: React.FC<ClassFinancialReportPageProps> = () => {
+  const [selectedDivision, setSelectedDivision] = useSelectionPersistence("financialDivision", "college");
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [selectedClassId, setSelectedClassId] = useSelectionPersistence("financialClassId", "");
   const [schoolYears, setSchoolYears] = useState<{ id: string; label: string; is_active: boolean }[]>([]);
@@ -28,7 +29,7 @@ export const ClassFinancialReportPage: React.FC<ClassFinancialReportPageProps> =
   // 1. Charger les années scolaires et classes
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [selectedDivision]);
 
   const fetchInitialData = async () => {
     try {
@@ -53,14 +54,17 @@ export const ClassFinancialReportPage: React.FC<ClassFinancialReportPageProps> =
         }
       }
 
-      // Classes
-      const cls = await listClasses();
+      // Classes filtrées selon la division active
+      const cls = await listClasses(selectedDivision);
       setClasses(cls);
 
       if (cls.length > 0) {
         if (!selectedClassId || !cls.some((c) => c.id === selectedClassId)) {
           setSelectedClassId(cls[0].id);
         }
+      } else {
+        setSelectedClassId("");
+        setReport(null);
       }
     } catch (err: any) {
       console.error("Erreur chargement classes/années:", err);
@@ -173,27 +177,52 @@ export const ClassFinancialReportPage: React.FC<ClassFinancialReportPageProps> =
         </div>
       )}
 
-      {/* Barre de sélection : Classe + Année scolaire */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-line rounded p-4 shadow-sm">
+      {/* Barre de sélection : Division + Classe + Année scolaire */}
+      <div className="bg-white border border-line rounded p-4 shadow-sm flex flex-col md:flex-row md:items-end gap-4">
+        {/* Division */}
         <div>
+          <label className="block text-xs font-semibold text-slate uppercase mb-1">Division</label>
+          <div className="flex gap-1 p-1 bg-paper border border-line rounded">
+            {["college", "primaire"].map((div) => (
+              <button
+                key={div}
+                type="button"
+                onClick={() => setSelectedDivision(div)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                  selectedDivision === div ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
+                }`}
+              >
+                {div === "college" ? "Collège" : "Primaire"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Classe */}
+        <div className="flex-1 min-w-[200px]">
           <label className="block text-xs font-semibold text-slate uppercase mb-1">
             Classe
           </label>
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            disabled={loadingClasses}
+            disabled={loadingClasses || classes.length === 0}
             className="w-full px-3 py-2 border border-line rounded focus:outline-none focus:ring-1 focus:ring-ink bg-paper text-sm font-medium"
           >
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.level})
-              </option>
-            ))}
+            {classes.length === 0 ? (
+              <option value="">Aucune classe dans cette division</option>
+            ) : (
+              classes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.level})
+                </option>
+              ))
+            )}
           </select>
         </div>
 
-        <div>
+        {/* Année scolaire */}
+        <div className="min-w-[180px]">
           <label className="block text-xs font-semibold text-slate uppercase mb-1">
             Année scolaire
           </label>

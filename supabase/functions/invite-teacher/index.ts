@@ -25,6 +25,17 @@ function isRateLimited(identifier: string): boolean {
   return false;
 }
 
+/**
+ * Génère un mot de passe de 16 caractères.
+ * Exclut les caractères ambigus (0, O, I, l, 1) pour faciliter la saisie manuelle.
+ */
+function generateSecurePassword(): string {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!';
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map((b) => chars[b % chars.length])
+    .join('');
+}
+
 Deno.serve(async (req: Request) => {
   // Gérer les requêtes CORS Preflight
   if (req.method === "OPTIONS") {
@@ -70,7 +81,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Contrôle de limitation de débit (Anti-Bruteforce / Anti-DoS - Faille 5)
+    // Contrôle de limitation de débit (Anti-Bruteforce / Anti-DoS)
     if (isRateLimited(callerUser.id)) {
       return new Response(
         JSON.stringify({ error: "Trop de requêtes. Veuillez patienter avant de réessayer." }),
@@ -104,7 +115,8 @@ Deno.serve(async (req: Request) => {
 
     // 3. Extraction et validation des données transmises dans le body
     const body = await req.json();
-    const { email, full_name } = body;
+    const { email, full_name, is_fictitious } = body;
+    const isFictitious = is_fictitious === true;
 
     if (!email || !full_name || typeof email !== "string" || typeof full_name !== "string") {
       return new Response(
@@ -121,27 +133,59 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Invitation de l'utilisateur par email
-    const { data: inviteData, error: inviteError } =
-      await adminClient.auth.admin.inviteUserByEmail(email.trim(), {
-        data: { full_name: full_name.trim() },
-      });
+    let createdUserId: string;
+    let createdUserEmail: string;
+    let generatedPassword: string | undefined;
 
-    if (inviteError) {
-      console.error("Erreur inviteUserByEmail:", inviteError);
-      return new Response(
-        JSON.stringify({ error: "Impossible d'envoyer l'invitation à cette adresse email." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (isFictitious) {
+      // --- MODE COMPTE FICTIF : createUser avec mot de passe généré ---
+      generatedPassword = generateSecurePassword();
+
+      const { data: createData, error: createError } =
+        await adminClient.auth.admin.createUser({
+          email: email.trim(),
+          password: generatedPassword,
+          email_confirm: true, // Pas besoin de confirmation par email
+          user_metadata: { full_name: full_name.trim() },
+        });
+
+      if (createError) {
+        console.error("Erreur createUser (fictif):", createError);
+        return new Response(
+          JSON.stringify({ error: "Impossible de créer le compte fictif : " + createError.message }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      createdUserId = createData.user.id;
+      createdUserEmail = createData.user.email!;
+    } else {
+      // --- MODE NORMAL : INVITATION PAR EMAIL ---
+      const { data: inviteData, error: inviteError } =
+        await adminClient.auth.admin.inviteUserByEmail(email.trim(), {
+          data: { full_name: full_name.trim() },
+        });
+
+      if (inviteError) {
+        console.error("Erreur inviteUserByEmail:", inviteError);
+        return new Response(
+          JSON.stringify({ error: "Impossible d'envoyer l'invitation à cette adresse email." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      createdUserId = inviteData.user.id;
+      createdUserEmail = inviteData.user.email!;
     }
 
     // 5. Création / Mise à jour du profil enseignant dans la table profiles
     const { error: profileInsertError } = await adminClient.from("profiles").upsert(
       {
-        id: inviteData.user.id,
+        id: createdUserId,
         email: email.trim(),
         full_name: full_name.trim(),
         role: "enseignant",
+        is_fictitious: isFictitious,
       },
       { onConflict: "id" }
     );
@@ -156,16 +200,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const responseBody: Record<string, unknown> = {
+      message: isFictitious
+        ? "Compte fictif créé avec succès."
+        : "Invitation envoyée et compte enseignant créé avec succès.",
+      user: {
+        id: createdUserId,
+        email: createdUserEmail,
+        full_name: full_name.trim(),
+        role: "enseignant",
+        is_fictitious: isFictitious,
+      },
+    };
+
+    // IMPORTANT : Le mot de passe n'est retourné QUE pour les comptes fictifs,
+    // une seule fois. Il n'est JAMAIS stocké en base ni loggé.
+    if (isFictitious && generatedPassword) {
+      responseBody.generated_password = generatedPassword;
+    }
+
     return new Response(
-      JSON.stringify({
-        message: "Invitation envoyée et compte enseignant créé avec succès.",
-        user: {
-          id: inviteData.user.id,
-          email: inviteData.user.email,
-          full_name: full_name.trim(),
-          role: "enseignant",
-        },
-      }),
+      JSON.stringify(responseBody),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {

@@ -128,3 +128,13 @@ export async function listDivisions() {
   return data as DivisionRecord[];
 }
 
+/**
+ * Supprime une classe.
+ */
+export async function deleteClass(id: string): Promise<void> {
+  const { error } = await supabase.from("classes").delete().eq("id", id);
+  if (error) {
+    console.error("Erreur deleteClass:", error);
+    throw error;
+  }
+}

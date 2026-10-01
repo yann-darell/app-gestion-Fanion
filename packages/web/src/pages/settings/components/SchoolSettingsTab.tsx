@@ -11,8 +11,10 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
   const [formData, setFormData] = useState<SchoolSettings>({
     name: settings.name || "",
     address: settings.address || "",
+    city: settings.city || "",
     phone: settings.phone || "",
     legal_notice: settings.legal_notice || "",
+    director_name: settings.director_name || "",
     logo_url: settings.logo_url || "",
     watermark_url: settings.watermark_url || "",
   });
@@ -83,7 +85,7 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
 
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-slate-700 mb-1">
-              Adresse physique & Ville *
+              Adresse physique *
             </label>
             <input
               type="text"
@@ -92,6 +94,33 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
               placeholder="ex: BP 1234, Yaoundé, Cameroun"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Ville (utilisée sur les bulletins) *
+            </label>
+            <input
+              type="text"
+              required
+              value={formData.city}
+              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              placeholder="ex: Yaoundé"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Nom de la Directrice / Directeur (bulletins)
+            </label>
+            <input
+              type="text"
+              value={formData.director_name}
+              onChange={(e) => setFormData({ ...formData, director_name: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              placeholder="ex: La Directrice"
             />
           </div>
 

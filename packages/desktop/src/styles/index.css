@@ -2,9 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+    color-scheme: light;
+}
+
 body {
     font-family: "Inter", sans-serif;
     background-color: #FAF9F5;
+    color: #150A5E;
+}
+
+/* Forcer le fond blanc et la lisibilité sur tous les champs de formulaire quel que soit le thème OS */
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+select,
+textarea {
+    background-color: #ffffff;
     color: #150A5E;
 }
 

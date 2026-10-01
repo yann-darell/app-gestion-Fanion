@@ -331,3 +331,37 @@ export async function deactivateStudent(id: string): Promise<StudentRecord> {
 
   return data as StudentRecord;
 }
+
+/**
+  * Réactivation d'un élève (statut 'active')
+  */
+export async function activateStudent(id: string): Promise<StudentRecord> {
+  const { data, error } = await supabase
+    .from("students")
+    .update({ status: "active" })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erreur activateStudent:", error);
+    throw error;
+  }
+
+  return data as StudentRecord;
+}
+
+/**
+  * Suppression définitive d'un élève
+  */
+export async function deleteStudent(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("students")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Erreur deleteStudent:", error);
+    throw error;
+  }
+}

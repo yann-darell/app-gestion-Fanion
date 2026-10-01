@@ -5,8 +5,10 @@ export interface SchoolSettings {
   id?: string;
   name: string;
   address: string;
+  city: string;
   phone: string;
   legal_notice: string;
+  director_name: string;
   logo_url?: string | null;
   watermark_url?: string | null;
   created_at?: string;
@@ -60,8 +62,10 @@ export async function getSchoolSettings(): Promise<SchoolSettings> {
     return {
       name: "Établissement Scolaire Le Fanion",
       address: "Yaoundé, Cameroun",
+      city: "Yaoundé",
       phone: "+237 600 00 00 00",
       legal_notice: "Établissement d'Enseignement Général et Bilingue",
+      director_name: "La Directrice",
     };
   }
 

@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Modal } from "../../../components/ui/Modal";
-import { Input } from "../../../components/ui/Input";
-import { Button } from "../../../components/ui/Button";
 import {
   SubjectRecord,
-  listDivisions,
   DivisionRecord,
+  DepartmentRecord,
+  listDivisions,
+  listDepartments,
   supabase,
 } from "@fanion/shared";
 
 interface SubjectFormData {
   name: string;
   division_id: string;
+  department_id?: string;
 }
 
 interface SubjectModalProps {
@@ -31,6 +31,7 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
   defaultDivision = "college",
 }) => {
   const [divisions, setDivisions] = useState<DivisionRecord[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -38,15 +39,19 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SubjectFormData>({
     defaultValues: {
       name: "",
       division_id: defaultDivision,
+      department_id: "",
     },
   });
 
-  // Fetch divisions on open
+  const selectedDivision = watch("division_id");
+
+  /* Load divisions, departments and editing subject data */
   useEffect(() => {
     if (!isOpen) return;
 
@@ -54,23 +59,29 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
       setLoading(true);
       setLoadError(null);
       try {
-        const divs = await listDivisions();
+        const [divs, depts] = await Promise.all([
+          listDivisions(),
+          listDepartments(),
+        ]);
         setDivisions(divs);
+        setDepartments(depts);
 
         if (editingSubject) {
           reset({
             name: editingSubject.name,
             division_id: editingSubject.division_id,
+            department_id: editingSubject.department_id || "",
           });
         } else {
           reset({
             name: "",
             division_id: defaultDivision,
+            department_id: "",
           });
         }
       } catch (err: any) {
-        console.error("Erreur lors du chargement des divisions:", err);
-        setLoadError("Impossible de charger les divisions.");
+        console.error("Erreur chargement métadonnées:", err);
+        setLoadError("Impossible de charger les divisions ou départements.");
       } finally {
         setLoading(false);
       }
@@ -79,101 +90,182 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
     loadFormMetadata();
   }, [isOpen, editingSubject, reset, defaultDivision]);
 
+  /* Form submission */
   const handleFormSubmit = async (data: SubjectFormData) => {
     try {
+      const payload: any = {
+        name: data.name.trim(),
+        division_id: data.division_id,
+        department_id:
+          data.division_id === "college" && data.department_id
+            ? data.department_id
+            : null,
+      };
+
       if (editingSubject) {
-        // Update subject
         const { error } = await supabase
           .from("subjects")
-          .update({
-            name: data.name.trim(),
-            division_id: data.division_id,
-          })
+          .update(payload)
           .eq("id", editingSubject.id);
-
         if (error) throw error;
       } else {
-        // Create subject
-        const { error } = await supabase
-          .from("subjects")
-          .insert({
-            name: data.name.trim(),
-            division_id: data.division_id,
-          });
-
+        const { error } = await supabase.from("subjects").insert(payload);
         if (error) throw error;
       }
       onSave();
       onClose();
     } catch (err: any) {
-      console.error("Erreur de sauvegarde de la matière:", err);
-      alert(`Erreur : ${err.message || "Une erreur est survenue lors de l'enregistrement."}`);
+      console.error("Erreur sauvegarde matière:", err);
+      alert(`Erreur : ${err.message || "Impossible d'enregistrer la matière."}`);
     }
   };
 
+  if (!isOpen) return null;
+
+  const inputCls = (hasError: boolean) =>
+    `w-full px-3 py-2 border rounded font-sans text-sm transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white ${
+      hasError ? "border-signal-red" : "border-line"
+    }`;
+
+  const labelCls =
+    "font-sans text-xs font-semibold text-slate uppercase tracking-wider";
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={editingSubject ? "Modifier la matière" : "Créer une matière"}
-      size="sm"
-    >
-      {loadError && (
-        <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
-          {loadError}
-        </div>
-      )}
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-ink/40" onClick={onClose} />
 
-      {loading ? (
-        <div className="py-8 flex items-center justify-center text-slate text-sm font-medium">
-          Chargement des divisions...
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
-          <Input
-            label="Nom de la matière"
-            placeholder="Ex : Anglais, Mathématiques..."
-            error={errors.name?.message}
-            required
-            {...register("name", { required: "Le nom est obligatoire" })}
-          />
-
-          <div className="w-full flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-semibold text-slate uppercase tracking-wider">
-              Division
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              {...register("division_id", { required: "La division est obligatoire" })}
+      {/* Panel */}
+      <div
+        className="relative bg-white w-full md:max-w-[480px] md:rounded shadow-lg border-t md:border border-line flex flex-col z-10 max-h-[90vh] rounded-t-xl md:rounded"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+          <h3 className="text-lg font-semibold font-display text-ink">
+            {editingSubject ? "Modifier la matière" : "Créer une matière"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-slate hover:text-ink transition p-1 rounded hover:bg-paper"
+            aria-label="Fermer"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              {divisions.map((div) => (
-                <option key={div.id} value={div.id}>
-                  {div.nom}
-                </option>
-              ))}
-            </select>
-            {errors.division_id && (
-              <span className="font-sans text-xs text-signal-red font-medium">
-                {errors.division_id.message}
-              </span>
-            )}
-          </div>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
 
-          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Enregistrer
-            </Button>
-          </div>
-        </form>
-      )}
-    </Modal>
+        {/* Content */}
+        <div className="px-5 py-4 overflow-y-auto flex-1">
+          {loadError && (
+            <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
+              {loadError}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="py-8 flex items-center justify-center text-slate text-sm font-medium">
+              Chargement…
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
+              {/* Nom */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Nom de la matière</label>
+                <input
+                  className={inputCls(!!errors.name)}
+                  placeholder="Ex : Anglais, Mathématiques…"
+                  {...register("name", { required: "Le nom est obligatoire" })}
+                />
+                {errors.name && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.name.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Division */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Division</label>
+                <select
+                  className={inputCls(!!errors.division_id)}
+                  {...register("division_id", { required: "La division est obligatoire" })}
+                >
+                  {divisions.map((div) => (
+                    <option key={div.id} value={div.id}>
+                      {div.nom}
+                    </option>
+                  ))}
+                </select>
+                {errors.division_id && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.division_id.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Département (Collège uniquement) */}
+              {selectedDivision === "college" && (
+                <div className="flex flex-col gap-1.5 p-3 bg-blue-50/50 rounded border border-blue-100">
+                  <div className="flex items-center justify-between">
+                    <label className="font-sans text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                      Département pédagogique
+                    </label>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-1.5 py-0.5 rounded">
+                      Collège
+                    </span>
+                  </div>
+                  <select
+                    className={inputCls(false)}
+                    {...register("department_id")}
+                  >
+                    <option value="">-- Aucun département --</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-blue-700/70">
+                    Attribue cette matière à un pôle d'enseignement du collège.
+                  </span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 border border-line text-slate rounded text-sm font-medium hover:bg-paper transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-ink text-white rounded text-sm font-semibold hover:bg-opacity-90 transition disabled:opacity-50"
+                >
+                  {isSubmitting ? "En cours…" : "Enregistrer"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };

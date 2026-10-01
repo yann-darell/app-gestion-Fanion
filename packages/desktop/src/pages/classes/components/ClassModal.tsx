@@ -1,45 +1,37 @@
 import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Modal } from "../../../components/ui/Modal";
-import { Input } from "../../../components/ui/Input";
-import { Button } from "../../../components/ui/Button";
-import { 
-  classSchema, 
-  ClassFormData, 
-  ClassRecord, 
-  SchoolYearRecord, 
+import {
+  classSchema,
+  ClassFormData,
+  ClassRecord,
+  SchoolYearRecord,
   DivisionRecord,
   UserProfile,
   getActiveSchoolYear,
   listDivisions,
   listUsers,
-  supabase
+  supabase,
 } from "@fanion/shared";
 
-// Custom inline Zod resolver for react-hook-form
-const zodResolver = (schema: typeof classSchema) => (values: any) => {
-  const result = schema.safeParse({
-    ...values,
-    // head_teacher_name can be empty string in form but should be null in DB
-    head_teacher_name: values.head_teacher_name || null,
-  });
-  
-  if (result.success) {
-    return { values: result.data, errors: {} };
-  }
-  
-  const errors = result.error.issues.reduce((acc: any, issue: any) => {
-    const path = issue.path[0];
-    acc[path] = {
-      type: issue.code,
-      message: issue.message,
-    };
-    return acc;
-  }, {});
-  
-  return { values: {}, errors };
-};
+/* ── Inline Zod resolver (no @hookform/resolvers needed) ── */
+const zodResolver =
+  (schema: typeof classSchema) => (values: any) => {
+    const result = schema.safeParse({
+      ...values,
+      head_teacher_name: values.head_teacher_name || null,
+    });
 
+    if (result.success) return { values: result.data, errors: {} };
+
+    const errors = result.error.issues.reduce((acc: any, issue: any) => {
+      const path = issue.path[0];
+      acc[path] = { type: issue.code, message: issue.message };
+      return acc;
+    }, {});
+    return { values: {}, errors };
+  };
+
+/* ── Props ── */
 interface ClassModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -76,7 +68,7 @@ export const ClassModal: React.FC<ClassModalProps> = ({
     },
   });
 
-  // Fetch school years and divisions on open
+  /* ── Load metadata on open ── */
   useEffect(() => {
     if (!isOpen) return;
 
@@ -84,24 +76,20 @@ export const ClassModal: React.FC<ClassModalProps> = ({
       setLoading(true);
       setLoadError(null);
       try {
-        // Load divisions
         const divs = await listDivisions();
         setDivisions(divs);
 
         const teacherList = await listUsers("enseignant");
         setTeachers(teacherList);
 
-        // Load all school years (so user can view or assign past/future if needed, but active is default)
         const { data: syData, error: syErr } = await supabase
           .from("school_years")
           .select("*")
           .order("start_date", { ascending: false });
-
         if (syErr) throw syErr;
         setSchoolYears(syData || []);
 
         if (editingClass) {
-          // Prepopulate form if editing
           reset({
             name: editingClass.name,
             level: editingClass.level,
@@ -110,7 +98,6 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             head_teacher_name: editingClass.head_teacher_name || "",
           });
         } else {
-          // Reset form
           reset({
             name: "",
             level: "",
@@ -119,19 +106,17 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             head_teacher_name: "",
           });
 
-          // Pre-select active school year
           const activeSy = await getActiveSchoolYear();
           if (activeSy) {
             setValue("school_year_id", activeSy.id);
           } else if (syData && syData.length > 0) {
-            // Fallback to most recent
-            const active = syData.find(sy => sy.is_active);
+            const active = syData.find((sy) => sy.is_active);
             setValue("school_year_id", active ? active.id : syData[0].id);
           }
         }
       } catch (err: any) {
-        console.error("Erreur lors du chargement des métadonnées du formulaire:", err);
-        setLoadError("Impossible de charger les années scolaires ou divisions.");
+        console.error("Erreur chargement métadonnées formulaire:", err);
+        setLoadError("Impossible de charger les données du formulaire.");
       } finally {
         setLoading(false);
       }
@@ -140,10 +125,10 @@ export const ClassModal: React.FC<ClassModalProps> = ({
     loadFormMetadata();
   }, [isOpen, editingClass, reset, setValue]);
 
+  /* ── Submit ── */
   const handleFormSubmit = async (data: ClassFormData) => {
     try {
       if (editingClass) {
-        // Update class
         const { error } = await supabase
           .from("classes")
           .update({
@@ -154,138 +139,209 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             head_teacher_name: data.head_teacher_name || null,
           })
           .eq("id", editingClass.id);
-
         if (error) throw error;
       } else {
-        // Create class
-        const { error } = await supabase
-          .from("classes")
-          .insert({
-            name: data.name,
-            level: data.level,
-            division_id: data.division_id,
-            school_year_id: data.school_year_id,
-            head_teacher_name: data.head_teacher_name || null,
-          });
-
+        const { error } = await supabase.from("classes").insert({
+          name: data.name,
+          level: data.level,
+          division_id: data.division_id,
+          school_year_id: data.school_year_id,
+          head_teacher_name: data.head_teacher_name || null,
+        });
         if (error) throw error;
       }
       onSave();
       onClose();
     } catch (err: any) {
-      console.error("Erreur de sauvegarde de la classe:", err);
-      alert(`Erreur : ${err.message || "Une erreur est survenue lors de l'enregistrement."}`);
+      console.error("Erreur sauvegarde classe:", err);
+      alert(
+        `Erreur : ${err.message || "Impossible d'enregistrer la classe."}`
+      );
     }
   };
 
+  if (!isOpen) return null;
+
+  /* ── Field helper ── */
+  const inputCls = (hasError: boolean) =>
+    `w-full px-3 py-2 border rounded font-sans text-sm transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white ${
+      hasError ? "border-signal-red" : "border-line"
+    }`;
+
+  const labelCls =
+    "font-sans text-xs font-semibold text-slate uppercase tracking-wider";
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={editingClass ? "Modifier la classe" : "Créer une classe"}
-      size="sm"
-    >
-      {loadError && (
-        <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
-          {loadError}
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-ink/40"
+        onClick={onClose}
+      />
+
+      {/* Panel – full-width bottom sheet on mobile, centered card on desktop */}
+      <div
+        className="relative bg-white w-full md:max-w-[480px] md:rounded shadow-lg border-t md:border border-line flex flex-col z-10 max-h-[90vh] rounded-t-xl md:rounded"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+          <h3 className="text-lg font-semibold font-display text-ink">
+            {editingClass ? "Modifier la classe" : "Créer une classe"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-slate hover:text-ink transition p-1 rounded hover:bg-paper"
+            aria-label="Fermer"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
-      )}
 
-      {loading ? (
-        <div className="py-8 flex items-center justify-center text-slate text-sm font-medium">
-          Chargement des données...
+        {/* Content */}
+        <div className="px-5 py-4 overflow-y-auto flex-1">
+          {loadError && (
+            <div className="mb-4 p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
+              {loadError}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="py-8 flex items-center justify-center text-slate text-sm font-medium">
+              Chargement…
+            </div>
+          ) : (
+            <form
+              onSubmit={handleSubmit(handleFormSubmit)}
+              className="flex flex-col gap-4"
+            >
+              {/* Nom */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Nom de la classe</label>
+                <input
+                  className={inputCls(!!errors.name)}
+                  placeholder="Ex : 6ème A, CM2 B…"
+                  {...register("name")}
+                />
+                {errors.name && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.name.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Niveau */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Niveau</label>
+                <input
+                  className={inputCls(!!errors.level)}
+                  placeholder="Ex : 6ème, CM2…"
+                  {...register("level")}
+                />
+                {errors.level && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.level.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Division */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Division</label>
+                <select
+                  className={inputCls(!!errors.division_id)}
+                  {...register("division_id")}
+                >
+                  {divisions.map((div) => (
+                    <option key={div.id} value={div.id}>
+                      {div.nom}
+                    </option>
+                  ))}
+                </select>
+                {errors.division_id && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.division_id.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Année scolaire */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Année scolaire</label>
+                <select
+                  className={inputCls(!!errors.school_year_id)}
+                  {...register("school_year_id")}
+                >
+                  <option value="">Sélectionnez…</option>
+                  {schoolYears.map((sy) => (
+                    <option key={sy.id} value={sy.id}>
+                      {sy.label} {sy.is_active ? "(Active)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {errors.school_year_id && (
+                  <span className="text-xs text-signal-red font-medium">
+                    {errors.school_year_id.message}
+                  </span>
+                )}
+              </div>
+
+              {/* Prof. principal */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>
+                  Professeur Principal{" "}
+                  <span className="normal-case text-slate/60">(optionnel)</span>
+                </label>
+                <select
+                  className={inputCls(false)}
+                  {...register("head_teacher_name")}
+                >
+                  <option value="">-- Aucun professeur principal --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.full_name}>
+                      {t.full_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 border border-line text-slate rounded text-sm font-medium hover:bg-paper transition disabled:opacity-50"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-ink text-white rounded text-sm font-semibold hover:bg-opacity-90 transition disabled:opacity-50"
+                >
+                  {isSubmitting ? "En cours…" : "Enregistrer"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
-      ) : (
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4">
-          <Input
-            label="Nom de la classe"
-            placeholder="Ex : 6ème A, CM2 B..."
-            error={errors.name?.message}
-            {...register("name")}
-          />
-
-          <Input
-            label="Niveau"
-            placeholder="Ex : 6ème, CM2..."
-            error={errors.level?.message}
-            {...register("level")}
-          />
-
-          <div className="w-full flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-semibold text-slate uppercase tracking-wider">
-              Division
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              {...register("division_id")}
-            >
-              {divisions.map((div) => (
-                <option key={div.id} value={div.id}>
-                  {div.nom}
-                </option>
-              ))}
-            </select>
-            {errors.division_id && (
-              <span className="font-sans text-xs text-signal-red font-medium">
-                {errors.division_id.message}
-              </span>
-            )}
-          </div>
-
-          <div className="w-full flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-semibold text-slate uppercase tracking-wider">
-              Année scolaire
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              {...register("school_year_id")}
-            >
-              <option value="">Sélectionnez une année...</option>
-              {schoolYears.map((sy) => (
-                <option key={sy.id} value={sy.id}>
-                  {sy.label} {sy.is_active ? "(Active)" : ""}
-                </option>
-              ))}
-            </select>
-            {errors.school_year_id && (
-              <span className="font-sans text-xs text-signal-red font-medium">
-                {errors.school_year_id.message}
-              </span>
-            )}
-          </div>
-
-          <div className="w-full flex flex-col gap-1.5">
-            <label className="font-sans text-xs font-semibold text-slate uppercase tracking-wider">
-              Professeur Principal (Optionnel)
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-line rounded font-sans transition-colors duration-150 focus:outline-none focus:border-ink h-10 bg-white"
-              {...register("head_teacher_name")}
-            >
-              <option value="">-- Aucun professeur principal --</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.full_name}>
-                  {t.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" isLoading={isSubmitting}>
-              Enregistrer
-            </Button>
-          </div>
-        </form>
-      )}
-    </Modal>
+      </div>
+    </div>
   );
 };
+
+export default ClassModal;

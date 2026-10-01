@@ -3,13 +3,16 @@ import { useForm } from "react-hook-form";
 import {
   SubjectRecord,
   DivisionRecord,
+  DepartmentRecord,
   listDivisions,
+  listDepartments,
   supabase,
 } from "@fanion/shared";
 
 interface SubjectFormData {
   name: string;
   division_id: string;
+  department_id?: string;
 }
 
 interface SubjectModalProps {
@@ -28,6 +31,7 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
   defaultDivision = "college",
 }) => {
   const [divisions, setDivisions] = useState<DivisionRecord[]>([]);
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -35,15 +39,19 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SubjectFormData>({
     defaultValues: {
       name: "",
       division_id: defaultDivision,
+      department_id: "",
     },
   });
 
-  /* Load divisions and editing subject data */
+  const selectedDivision = watch("division_id");
+
+  /* Load divisions, departments and editing subject data */
   useEffect(() => {
     if (!isOpen) return;
 
@@ -51,23 +59,29 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
       setLoading(true);
       setLoadError(null);
       try {
-        const divs = await listDivisions();
+        const [divs, depts] = await Promise.all([
+          listDivisions(),
+          listDepartments(),
+        ]);
         setDivisions(divs);
+        setDepartments(depts);
 
         if (editingSubject) {
           reset({
             name: editingSubject.name,
             division_id: editingSubject.division_id,
+            department_id: editingSubject.department_id || "",
           });
         } else {
           reset({
             name: "",
             division_id: defaultDivision,
+            department_id: "",
           });
         }
       } catch (err: any) {
-        console.error("Erreur chargement divisions:", err);
-        setLoadError("Impossible de charger les divisions.");
+        console.error("Erreur chargement métadonnées:", err);
+        setLoadError("Impossible de charger les divisions ou départements.");
       } finally {
         setLoading(false);
       }
@@ -79,20 +93,23 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
   /* Form submission */
   const handleFormSubmit = async (data: SubjectFormData) => {
     try {
+      const payload: any = {
+        name: data.name.trim(),
+        division_id: data.division_id,
+        department_id:
+          data.division_id === "college" && data.department_id
+            ? data.department_id
+            : null,
+      };
+
       if (editingSubject) {
         const { error } = await supabase
           .from("subjects")
-          .update({
-            name: data.name.trim(),
-            division_id: data.division_id,
-          })
+          .update(payload)
           .eq("id", editingSubject.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("subjects").insert({
-          name: data.name.trim(),
-          division_id: data.division_id,
-        });
+        const { error } = await supabase.from("subjects").insert(payload);
         if (error) throw error;
       }
       onSave();
@@ -198,6 +215,34 @@ export const SubjectModal: React.FC<SubjectModalProps> = ({
                   </span>
                 )}
               </div>
+
+              {/* Département (Collège uniquement) */}
+              {selectedDivision === "college" && (
+                <div className="flex flex-col gap-1.5 p-3 bg-blue-50/50 rounded border border-blue-100">
+                  <div className="flex items-center justify-between">
+                    <label className="font-sans text-xs font-semibold text-blue-900 uppercase tracking-wider">
+                      Département pédagogique
+                    </label>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-1.5 py-0.5 rounded">
+                      Collège
+                    </span>
+                  </div>
+                  <select
+                    className={inputCls(false)}
+                    {...register("department_id")}
+                  >
+                    <option value="">-- Aucun département --</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-blue-700/70">
+                    Attribue cette matière à un pôle d'enseignement du collège.
+                  </span>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-line">

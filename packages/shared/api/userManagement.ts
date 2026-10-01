@@ -8,6 +8,7 @@ export interface UserProfile {
     role: "principal" | "directeur_etudes" | "enseignant" | string;
     division_scope?: string | null;
     is_active?: boolean;
+    is_fictitious?: boolean;
     created_at: string;
 }
 
@@ -19,6 +20,18 @@ export interface InviteTeacherResponse {
         full_name: string;
         role: string;
     };
+}
+
+export interface CreateFictitiousAccountResponse {
+    message: string;
+    user: {
+        id: string;
+        email: string;
+        full_name: string;
+        role: string;
+        is_fictitious: true;
+    };
+    generated_password: string;
 }
 
 /**
@@ -49,12 +62,40 @@ export async function inviteTeacher(
 }
 
 /**
+ * Crée un compte enseignant avec un email fictif auto-généré et un mot de passe fort.
+ * Utilisé pour les enseignants n'ayant pas d'adresse email personnelle.
+ * Le mot de passe généré est retourné UNE SEULE FOIS dans la réponse.
+ */
+export async function createFictitiousTeacher(
+    email: string,
+    fullName: string
+): Promise<CreateFictitiousAccountResponse> {
+    const { data, error } = await supabase.functions.invoke("invite-teacher", {
+        body: {
+            email: email.trim(),
+            full_name: fullName.trim(),
+            is_fictitious: true,
+        },
+    });
+
+    if (error) {
+        throw new Error(error.message || "Erreur de communication avec le serveur.");
+    }
+
+    if (data?.error) {
+        throw new Error(data.error);
+    }
+
+    return data as CreateFictitiousAccountResponse;
+}
+
+/**
  * Liste les profils utilisateurs (enseignants, direction, etc.).
  */
 export async function listUsers(roleFilter?: string): Promise<UserProfile[]> {
     let query = supabase
         .from("profiles")
-        .select("id, full_name, email, role, division_scope, is_active, created_at")
+        .select("id, full_name, email, role, division_scope, is_active, is_fictitious, created_at")
         .order("created_at", { ascending: false });
 
     if (roleFilter && roleFilter !== "all") {
@@ -113,31 +154,69 @@ export async function updateUser(
 }
 
 /**
- * Supprime un profil utilisateur.
+ * Supprime un profil utilisateur et son compte d'authentification.
  */
 export async function deleteUser(id: string): Promise<void> {
-    // Vérification préalable pour empêcher la suppression de comptes de direction
-    const { data: targetProfile, error: fetchErr } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", id)
-        .single();
-        
-    if (fetchErr) {
-        throw new Error("Impossible de vérifier les permissions du compte ciblé.");
-    }
-    
-    if (targetProfile?.role === "principal" || targetProfile?.role === "directeur_etudes") {
-        throw new Error("Action interdite : les comptes de l'équipe de direction ne peuvent pas être supprimés.");
-    }
-
-    const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", id);
+    const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { user_id: id },
+    });
 
     if (error) {
-        throw new Error(error.message || "Échec de la suppression du compte utilisateur.");
+        // Tenter d'extraire le message d'erreur du corps de la réponse
+        let errorMessage = "Erreur de communication avec le serveur lors de la suppression.";
+        try {
+            // Si l'erreur contient un contexte (FunctionsHttpError), le message est dans error.context
+            if ((error as any).context) {
+                const body = await (error as any).context.json();
+                if (body?.error) errorMessage = body.error;
+            } else if (data?.error) {
+                errorMessage = data.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+        } catch {
+            // Fallback au message d'erreur brut
+            if (error.message) errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
     }
+
+    if (data?.error) {
+        throw new Error(data.error);
+    }
+}
+
+/**
+ * Réinitialise le mot de passe d'un compte fictif enseignant.
+ * Retourne le nouveau mot de passe UNE SEULE FOIS.
+ * Interdit sur les comptes non-fictifs (erreur 403 côté serveur).
+ */
+export async function resetFictitiousPassword(
+    userId: string
+): Promise<{ generated_password: string }> {
+    const { data, error } = await supabase.functions.invoke("reset-fictitious-password", {
+        body: { user_id: userId },
+    });
+
+    if (error) {
+        let errorMessage = "Erreur de communication avec le serveur.";
+        try {
+            if ((error as any).context) {
+                const body = await (error as any).context.json();
+                if (body?.error) errorMessage = body.error;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+        } catch {
+            if (error.message) errorMessage = error.message;
+        }
+        throw new Error(errorMessage);
+    }
+
+    if (data?.error) {
+        throw new Error(data.error);
+    }
+
+    return data as { generated_password: string };
 }
 

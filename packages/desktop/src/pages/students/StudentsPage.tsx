@@ -4,6 +4,8 @@ import {
   listStudents,
   listClasses,
   deactivateStudent,
+  activateStudent,
+  deleteStudent,
   getStudentPhotoUrl,
   StudentRecord,
   ClassRecord,
@@ -32,7 +34,7 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
   const [classIdFilter, setClassIdFilter] = useSelectionPersistence("classId", "all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modal
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentRecord | null>(null);
 
@@ -127,6 +129,34 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
     }
   };
 
+  const handleActivateStudent = async (student: StudentRecord) => {
+    const confirmed = window.confirm(
+      `Réactiver l'élève ${student.first_name.toUpperCase()} ${student.last_name.toUpperCase()} ?`
+    );
+    if (confirmed) {
+      try {
+        await activateStudent(student.id);
+        fetchStudentsList();
+      } catch (err: any) {
+        alert(`Erreur de réactivation : ${err.message}`);
+      }
+    }
+  };
+
+  const handleHardDeleteStudent = async (student: StudentRecord) => {
+    const confirmed = window.confirm(
+      `Voulez-vous VRAIMENT supprimer définitivement l'élève ${student.first_name.toUpperCase()} ${student.last_name.toUpperCase()} ? Cette action est irréversible.`
+    );
+    if (confirmed) {
+      try {
+        await deleteStudent(student.id);
+        fetchStudentsList();
+      } catch (err: any) {
+        alert(`Erreur de suppression : ${err.message}`);
+      }
+    }
+  };
+
   const hasFilters = classIdFilter !== "all" || searchQuery.trim() !== "";
 
   const selectedClass = suppliesModalStudent
@@ -135,7 +165,7 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
-      {/* Header aligné sur le Web */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold font-display text-ink">Élèves</h1>
@@ -192,7 +222,7 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded border border-line overflow-hidden shadow-sm">
+          <div className="hidden md:block bg-white rounded border border-line overflow-x-auto shadow-sm">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-line bg-paper-dark/50 text-slate uppercase text-[11px] font-semibold tracking-wider">
@@ -217,6 +247,8 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
                     supplySummary={suppliesMap[student.id]}
                     onEdit={handleOpenEditModal}
                     onDelete={handleDeleteStudent}
+                    onActivate={handleActivateStudent}
+                    onHardDelete={handleHardDeleteStudent}
                     onOpenSupplies={handleOpenSuppliesModal}
                     onViewDetails={(s) => navigate(`/students/${s.id}`)}
                   />
@@ -236,6 +268,8 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
                 supplySummary={suppliesMap[student.id]}
                 onEdit={handleOpenEditModal}
                 onDelete={handleDeleteStudent}
+                onActivate={handleActivateStudent}
+                onHardDelete={handleHardDeleteStudent}
                 onOpenSupplies={handleOpenSuppliesModal}
                 onViewDetails={(s) => navigate(`/students/${s.id}`)}
               />
@@ -270,6 +304,8 @@ function StudentRowDesktop({
   supplySummary,
   onEdit,
   onDelete,
+  onActivate,
+  onHardDelete,
   onOpenSupplies,
   onViewDetails,
 }: {
@@ -279,6 +315,8 @@ function StudentRowDesktop({
   supplySummary?: StudentSupplySummary;
   onEdit: (s: StudentRecord) => void;
   onDelete: (s: StudentRecord) => void;
+  onActivate: (s: StudentRecord) => void;
+  onHardDelete: (s: StudentRecord) => void;
   onOpenSupplies: (s: StudentRecord) => void;
   onViewDetails: (s: StudentRecord) => void;
 }) {
@@ -369,10 +407,10 @@ function StudentRowDesktop({
         </td>
       )}
       <td className="py-3 px-4 text-right">
-        <div className="flex items-center justify-end gap-2 text-xs">
+        <div className="flex items-center justify-end gap-2 text-xs flex-nowrap whitespace-nowrap">
           <button
             onClick={() => onViewDetails(student)}
-            className="text-emerald-700 font-semibold hover:underline cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white cursor-pointer transition-all duration-200"
           >
             Détails
           </button>
@@ -380,23 +418,38 @@ function StudentRowDesktop({
             <>
               <button
                 onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
-                className="text-amber-800 font-semibold hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded border-2 border-fanion-gold text-fanion-gold font-bold hover:bg-fanion-gold hover:text-white cursor-pointer transition-all duration-200"
               >
                 Payer
               </button>
               <button
                 onClick={() => onEdit(student)}
-                className="text-ink font-medium hover:underline cursor-pointer"
+                className="text-ink font-medium hover:underline cursor-pointer px-2"
               >
                 Modifier
               </button>
-              {student.status !== "inactive" && (
+              {student.status !== "inactive" ? (
                 <button
                   onClick={() => onDelete(student)}
-                  className="text-rose-600 font-medium hover:underline cursor-pointer"
+                  className="text-rose-600 font-medium hover:underline cursor-pointer px-2"
                 >
                   Désactiver
                 </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onActivate(student)}
+                    className="text-emerald-600 font-medium hover:underline cursor-pointer px-2"
+                  >
+                    Réactiver
+                  </button>
+                  <button
+                    onClick={() => onHardDelete(student)}
+                    className="text-rose-700 font-bold hover:underline cursor-pointer px-2"
+                  >
+                    Supprimer
+                  </button>
+                </>
               )}
             </>
           )}
@@ -413,6 +466,8 @@ function StudentCardMobile({
   supplySummary,
   onEdit,
   onDelete,
+  onActivate,
+  onHardDelete,
   onOpenSupplies,
   onViewDetails,
 }: {
@@ -422,6 +477,8 @@ function StudentCardMobile({
   supplySummary?: StudentSupplySummary;
   onEdit: (s: StudentRecord) => void;
   onDelete: (s: StudentRecord) => void;
+  onActivate: (s: StudentRecord) => void;
+  onHardDelete: (s: StudentRecord) => void;
   onOpenSupplies: (s: StudentRecord) => void;
   onViewDetails: (s: StudentRecord) => void;
 }) {
@@ -505,10 +562,10 @@ function StudentCardMobile({
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 text-xs">
+      <div className="flex flex-wrap items-center justify-end gap-2 text-xs mt-1">
         <button
           onClick={() => onViewDetails(student)}
-          className="text-emerald-700 font-semibold hover:underline cursor-pointer"
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded border-2 border-ink text-ink font-bold hover:bg-ink hover:text-white cursor-pointer transition-all duration-200"
         >
           Détails
         </button>
@@ -516,23 +573,38 @@ function StudentCardMobile({
           <>
             <button
               onClick={() => navigate(`/finance/payments?studentId=${student.id}&classId=${student.class_id}`)}
-              className="text-amber-800 font-semibold hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded border-2 border-fanion-gold text-fanion-gold font-bold hover:bg-fanion-gold hover:text-white cursor-pointer transition-all duration-200"
             >
               Payer
             </button>
             <button
               onClick={() => onEdit(student)}
-              className="text-ink font-medium hover:underline cursor-pointer"
+              className="text-ink font-medium hover:underline cursor-pointer px-2"
             >
               Modifier
             </button>
-            {student.status !== "inactive" && (
+            {student.status !== "inactive" ? (
               <button
                 onClick={() => onDelete(student)}
-                className="text-rose-600 font-medium hover:underline cursor-pointer"
+                className="text-rose-600 font-medium hover:underline cursor-pointer px-2"
               >
                 Désactiver
               </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => onActivate(student)}
+                  className="text-emerald-600 font-medium hover:underline cursor-pointer px-2"
+                >
+                  Réactiver
+                </button>
+                <button
+                  onClick={() => onHardDelete(student)}
+                  className="text-rose-700 font-bold hover:underline cursor-pointer px-2"
+                >
+                  Supprimer
+                </button>
+              </>
             )}
           </>
         )}

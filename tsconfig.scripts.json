@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "outDir": "./dist-scripts",
+    "rootDir": ".",
+    "baseUrl": "."
+  },
+  "include": [
+    "generate_primary_bulletin_preview.ts",
+    "check_primary_db.ts",
+    "packages/shared/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "packages/web", "packages/desktop"]
+}

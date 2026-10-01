@@ -16,21 +16,42 @@ import {
   BulletinCompletenessDiagnostic,
   useSelectionPersistence,
   generateClassCombinedBulletinsPdfBuffer,
+  listPrimaryMonths,
+  generateAndSavePrimaryBulletin,
+  getPrimaryBulletinSignedUrl,
+  supabase,
 } from "@fanion/shared";
+
+interface PrimaryMonthRecord {
+  id: string;
+  label: string;
+  order_index: number;
+  term_id: string;
+  termLabel?: string;
+}
 
 interface BulletinsPdfPageProps {
   userRole?: string;
 }
 
 export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) => {
-  const [selectedDivision, setSelectedDivision] = useSelectionPersistence("division", "college");
+  const [selectedDivision, setSelectedDivision] = useSelectionPersistence<"college" | "primaire">("division", "college");
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [selectedClassId, setSelectedClassId] = useSelectionPersistence("classId", "");
 
+  // Collège : séquence / term
   const [periodType, setPeriodType] = useSelectionPersistence<"sequence" | "term">("periodType", "sequence");
   const [terms, setTerms] = useState<TermRecord[]>([]);
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence("periodId", "");
+
+  // Primaire : month / term
+  const [primaryPeriodType, setPrimaryPeriodType] = useSelectionPersistence<"month" | "term">("primaryPeriodType", "month");
+  const [primaryMonths, setPrimaryMonths] = useState<PrimaryMonthRecord[]>([]);
+  const [selectedPrimaryPeriodId, setSelectedPrimaryPeriodId] = useSelectionPersistence("primaryPeriodId", "");
+  const [primaryBulletinStatuses, setPrimaryBulletinStatuses] = useState<Record<string, { isGenerated: boolean; pdfPath?: string }>>({});
+
+  const isPrimary = selectedDivision === "primaire";
 
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [bulletinStatuses, setBulletinStatuses] = useState<Record<string, StudentBulletinStatus>>({});
@@ -39,9 +60,11 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [loadingStatuses, setLoadingStatuses] = useState(false);
 
+  // État de génération individuelle
   const [generatingStudentId, setGeneratingStudentId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  // Modale d'avertissement complétude
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [pendingStudent, setPendingStudent] = useState<StudentRecord | null>(null);
   const [diagnostic, setDiagnostic] = useState<BulletinCompletenessDiagnostic | null>(null);
@@ -50,6 +73,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
 
   const isAuthorized = userRole === "principal" || userRole === "directeur_etudes";
 
+  // 1. Initialisation des classes, trimestres, séquences et mois primaire
   useEffect(() => {
     const initData = async () => {
       setLoadingInit(true);
@@ -67,6 +91,41 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         if (clsData.length > 0) {
           setSelectedClassId((prev) => (prev && clsData.some((c) => c.id === prev) ? prev : clsData[0].id));
         }
+
+        // Pour la division primaire : charger les mois de l'année active
+        if (selectedDivision === "primaire") {
+          try {
+            let yearId: string | undefined;
+            const { data: activeYear } = await supabase
+              .from("school_years")
+              .select("id")
+              .eq("is_active", true)
+              .maybeSingle();
+
+            if (activeYear?.id) {
+              yearId = activeYear.id;
+            } else {
+              const { data: latestYear } = await supabase
+                .from("school_years")
+                .select("id")
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              yearId = latestYear?.id;
+            }
+
+            const months = await listPrimaryMonths(yearId);
+            setPrimaryMonths(months);
+            if (months.length > 0) {
+              setSelectedPrimaryPeriodId((prev) =>
+                prev && months.some((m) => m.id === prev) ? prev : months[0].id
+              );
+            }
+          } catch (e) {
+            console.warn("Mois primaires non disponibles desktop:", e);
+            setPrimaryMonths([]);
+          }
+        }
       } catch (err: any) {
         console.error("Erreur d'initialisation des bulletins desktop:", err);
         setError("Impossible de charger la liste des classes ou des périodes.");
@@ -77,6 +136,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     initData();
   }, [selectedDivision]);
 
+  // 2. Présélection intelligente de la période par défaut (Collège)
   useEffect(() => {
     if (periodType === "sequence") {
       if (sequences.length > 0) {
@@ -89,6 +149,24 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
   }, [periodType, sequences, terms]);
 
+  // 2.bis Présélection intelligente de la période primaire par défaut (Mois ou Trimestre)
+  useEffect(() => {
+    if (primaryPeriodType === "month") {
+      if (primaryMonths.length > 0) {
+        setSelectedPrimaryPeriodId((prev) =>
+          prev && primaryMonths.some((m) => m.id === prev) ? prev : primaryMonths[0].id
+        );
+      }
+    } else {
+      if (terms.length > 0) {
+        setSelectedPrimaryPeriodId((prev) =>
+          prev && terms.some((t) => t.id === prev) ? prev : terms[0].id
+        );
+      }
+    }
+  }, [primaryPeriodType, primaryMonths, terms]);
+
+  // 3. Chargement des élèves de la classe
   const loadStudents = useCallback(async () => {
     if (!selectedClassId) {
       setStudents([]);
@@ -112,6 +190,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     loadStudents();
   }, [loadStudents]);
 
+  // 4. Chargement déterministe des statuts des bulletins (Généré/Non généré) dès que Classe, Période ou Élèves changent
   const loadStatuses = useCallback(async () => {
     if (!selectedClassId || !selectedPeriodId || students.length === 0) {
       setBulletinStatuses({});
@@ -132,29 +211,52 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     loadStatuses();
   }, [loadStatuses]);
 
+  // Handler 1 : Demande de Génération Individuelle
+  // Pour le primaire → génération directe (pas de contrôle de complétude APC)
+  // Pour le collège → vérification des notes manquantes
   const handleRequestGeneration = async (student: StudentRecord) => {
-    if (!selectedPeriodId) return;
     setError(null);
     setGeneratingStudentId(student.id);
 
     try {
-      const diag = await checkStudentBulletinCompleteness(student.id, selectedPeriodId, periodType);
-      setDiagnostic(diag);
-
-      if (!diag.isComplete) {
-        setPendingStudent(student);
-        setShowWarningModal(true);
-        setGeneratingStudentId(null);
+      if (isPrimary) {
+        // Bulletin APC primaire — génération directe
+        if (!selectedPrimaryPeriodId) {
+          setError("Veuillez d'abord sélectionner une période (mois ou trimestre) valide.");
+          return;
+        }
+        await generateAndSavePrimaryBulletin({
+          studentId: student.id,
+          periodId: selectedPrimaryPeriodId,
+          periodType: primaryPeriodType,
+        });
+        // Rafraîchir les statuts primaires
+        await loadPrimaryBulletinStatuses();
       } else {
-        await executeGeneration(student.id);
+        // Bulletin collège
+        if (!selectedPeriodId) {
+          setError("Veuillez d'abord sélectionner une période (séquence ou trimestre) valide.");
+          return;
+        }
+        const diag = await checkStudentBulletinCompleteness(student.id, selectedPeriodId, periodType);
+        setDiagnostic(diag);
+
+        if (!diag.isComplete) {
+          setPendingStudent(student);
+          setShowWarningModal(true);
+        } else {
+          await executeGeneration(student.id);
+        }
       }
     } catch (err: any) {
-      console.error("Erreur contrôle complétude bulletin desktop:", err);
-      setError(err.message || "Erreur lors de la vérification des notes de l'élève.");
+      console.error("Erreur génération bulletin desktop:", err);
+      setError(err.message || "Erreur lors de la génération du bulletin.");
+    } finally {
       setGeneratingStudentId(null);
     }
   };
 
+  // Handler 2 : Exécution effective de la génération (Collège seulement)
   const executeGeneration = async (studentId: string) => {
     try {
       setGeneratingStudentId(studentId);
@@ -167,6 +269,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         periodType,
       });
 
+      // Rafraîchir les statuts
       await loadStatuses();
     } catch (err: any) {
       console.error("Erreur génération bulletin PDF desktop:", err);
@@ -176,14 +279,47 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
   };
 
+  // Statuts bulletins primaires
+  const loadPrimaryBulletinStatuses = useCallback(async () => {
+    if (!selectedPrimaryPeriodId || students.length === 0) {
+      setPrimaryBulletinStatuses({});
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from("primary_bulletin_generations")
+        .select("student_id, pdf_path")
+        .eq("period_id", selectedPrimaryPeriodId)
+        .eq("period_type", primaryPeriodType)
+        .in("student_id", students.map((s) => s.id));
+
+      const map: Record<string, { isGenerated: boolean; pdfPath?: string }> = {};
+      students.forEach((s) => { map[s.id] = { isGenerated: false }; });
+      (data || []).forEach((r: any) => {
+        map[r.student_id] = { isGenerated: true, pdfPath: r.pdf_path };
+      });
+      setPrimaryBulletinStatuses(map);
+    } catch (e) {
+      console.warn("Statuts bulletins primaires desktop non chargés:", e);
+    }
+  }, [selectedPrimaryPeriodId, primaryPeriodType, students]);
+
+  useEffect(() => {
+    if (isPrimary) loadPrimaryBulletinStatuses();
+  }, [isPrimary, loadPrimaryBulletinStatuses]);
+
+  // Modal de prévisualisation du PDF dans l'application
   const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
 
-  const handleViewPdf = async (studentId: string, pdfPath?: string) => {
+  // Action Voir le PDF (Modale Intégrée) — collège ou primaire
+  const handleViewPdf = async (studentId: string, pdfPath?: string, fromPrimary = false) => {
     if (!pdfPath) return;
     setActionLoading(`view_${studentId}`);
     setError(null);
     try {
-      const signedUrl = await getBulletinSignedUrl(pdfPath);
+      const signedUrl = fromPrimary
+        ? await getPrimaryBulletinSignedUrl(pdfPath)
+        : await getBulletinSignedUrl(pdfPath);
       setPreviewPdfUrl(signedUrl);
     } catch (err: any) {
       console.error("Erreur ouverture bulletin desktop:", err);
@@ -193,12 +329,15 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
   };
 
-  const handleDownloadPdf = async (studentId: string, pdfPath?: string, studentName?: string) => {
+  // Action Télécharger le PDF (Téléchargement direct via Blob sans ouvrir d'onglet)
+  const handleDownloadPdf = async (studentId: string, pdfPath?: string, studentName?: string, fromPrimary = false) => {
     if (!pdfPath) return;
     setActionLoading(`download_${studentId}`);
     setError(null);
     try {
-      const signedUrl = await getBulletinSignedUrl(pdfPath);
+      const signedUrl = fromPrimary
+        ? await getPrimaryBulletinSignedUrl(pdfPath)
+        : await getBulletinSignedUrl(pdfPath);
       const res = await fetch(signedUrl);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -280,7 +419,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
           </p>
         </div>
 
-        {students.length > 0 && (
+        {!isPrimary && students.length > 0 && (
           <button
             type="button"
             onClick={handleBatchDownloadClassBulletins}
@@ -307,7 +446,9 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         </div>
       )}
 
+      {/* Barre de Filtres Globaux */}
       <div className="bg-white p-4 border border-line rounded shadow-sm flex flex-col md:flex-row md:items-end gap-4">
+        {/* Division */}
         <div>
           <label className="block text-xs font-semibold text-slate uppercase mb-1">Division</label>
           <div className="flex gap-1 p-1 bg-paper border border-line rounded">
@@ -325,6 +466,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
           </div>
         </div>
 
+        {/* Classe */}
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs font-semibold text-slate uppercase mb-1">Classe</label>
           <select
@@ -341,55 +483,124 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate uppercase mb-1">Type de Période</label>
-          <div className="flex gap-1 p-1 bg-paper border border-line rounded">
-            <button
-              type="button"
-              onClick={() => setPeriodType("sequence")}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                periodType === "sequence" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
-              }`}
-            >
-              Séquence
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriodType("term")}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                periodType === "term" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
-              }`}
-            >
-              Trimestre
-            </button>
-          </div>
-        </div>
-
-        <div className="min-w-[180px]">
-          <label className="block text-xs font-semibold text-slate uppercase mb-1">
-            {periodType === "sequence" ? "Séquence" : "Trimestre"}
-          </label>
-          <select
-            value={selectedPeriodId}
-            onChange={(e) => setSelectedPeriodId(e.target.value)}
-            className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink font-semibold"
-            disabled={loadingInit}
-          >
-            {periodType === "sequence"
-              ? sequences.map((seq) => (
-                  <option key={seq.id} value={seq.id}>
-                    {seq.label}
-                  </option>
-                ))
-              : terms.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.label}
-                  </option>
-                ))}
-          </select>
-        </div>
+        {/* Type de Période — conditionnel selon la division */}
+        {!isPrimary ? (
+          /* Collège : Séquence / Trimestre */
+          <>
+            <div>
+              <label className="block text-xs font-semibold text-slate uppercase mb-1">Type de Période</label>
+              <div className="flex gap-1 p-1 bg-paper border border-line rounded">
+                <button
+                  type="button"
+                  onClick={() => setPeriodType("sequence")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    periodType === "sequence" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Séquence
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeriodType("term")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    periodType === "term" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Trimestre
+                </button>
+              </div>
+            </div>
+            <div className="min-w-[180px]">
+              <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                {periodType === "sequence" ? "Séquence" : "Trimestre"}
+              </label>
+              <select
+                value={selectedPeriodId}
+                onChange={(e) => setSelectedPeriodId(e.target.value)}
+                className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink font-semibold"
+                disabled={loadingInit}
+              >
+                {periodType === "sequence"
+                  ? sequences.map((seq) => (
+                      <option key={seq.id} value={seq.id}>{seq.label}</option>
+                    ))
+                  : terms.map((t) => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          /* Primaire : Mois / Trimestre */
+          <>
+            <div>
+              <label className="block text-xs font-semibold text-slate uppercase mb-1">Type de Période</label>
+              <div className="flex gap-1 p-1 bg-paper border border-line rounded">
+                <button
+                  type="button"
+                  onClick={() => setPrimaryPeriodType("month")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    primaryPeriodType === "month"
+                      ? "bg-emerald-700 text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Mois
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrimaryPeriodType("term")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    primaryPeriodType === "term"
+                      ? "bg-emerald-700 text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Trimestre
+                </button>
+              </div>
+            </div>
+            <div className="min-w-[180px]">
+              <label className="block text-xs font-semibold text-slate uppercase mb-1">
+                {primaryPeriodType === "month" ? "Mois" : "Trimestre"}
+              </label>
+              {primaryPeriodType === "month" ? (
+                primaryMonths.length > 0 ? (
+                  <select
+                    value={selectedPrimaryPeriodId}
+                    onChange={(e) => setSelectedPrimaryPeriodId(e.target.value)}
+                    className="w-full px-3 py-2 border border-emerald-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 font-semibold"
+                    disabled={loadingInit}
+                  >
+                    {primaryMonths.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}{m.termLabel ? ` (${m.termLabel})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="px-3 py-2 border border-amber-300 rounded text-xs text-amber-700 bg-amber-50">
+                    Aucun mois configuré — contactez l'administration
+                  </div>
+                )
+              ) : (
+                <select
+                  value={selectedPrimaryPeriodId}
+                  onChange={(e) => setSelectedPrimaryPeriodId(e.target.value)}
+                  className="w-full px-3 py-2 border border-emerald-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 font-semibold"
+                  disabled={loadingInit}
+                >
+                  {terms.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
+      {/* Tableau des Élèves de la Classe */}
       <div className="bg-white border border-line rounded shadow-sm overflow-hidden">
         {loadingStudents || loadingStatuses ? (
           <div className="py-16 text-center text-sm text-slate font-medium">Chargement de la liste et des statuts…</div>
@@ -420,8 +631,9 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate">{st.matricule}</td>
 
+                      {/* Statut Généré / Pas Généré */}
                       <td className="px-4 py-3 text-center">
-                        {status.isGenerated ? (
+                        {(isPrimary ? primaryBulletinStatuses[st.id]?.isGenerated : status.isGenerated) ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                             Généré
@@ -433,38 +645,76 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                         )}
                       </td>
 
+                      {/* Actions par élève */}
                       <td className="px-4 py-3 text-right pr-4">
                         <div className="inline-flex flex-wrap justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleRequestGeneration(st)}
-                            disabled={isBusy}
-                            className={`px-2.5 py-1.5 rounded text-xs font-semibold transition inline-flex items-center gap-1 whitespace-nowrap ${
-                              status.isGenerated
-                                ? "border border-line text-slate hover:bg-paper"
-                                : "bg-ink text-white hover:bg-opacity-90"
-                            } disabled:opacity-50`}
-                          >
-                            {isBusy ? "Génération…" : status.isGenerated ? "Régénérer" : "Générer"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleViewPdf(st.id, status.pdfPath)}
-                            disabled={!status.isGenerated || actionLoading === `view_${st.id}`}
-                            className="px-2.5 py-1.5 border border-line rounded text-xs font-semibold text-ink hover:bg-paper transition disabled:opacity-30 disabled:hover:bg-transparent whitespace-nowrap"
-                          >
-                            {actionLoading === `view_${st.id}` ? "…" : "Voir"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadPdf(st.id, status.pdfPath, `${st.last_name}_${st.first_name}`)}
-                            disabled={!status.isGenerated || actionLoading === `download_${st.id}`}
-                            className="px-2.5 py-1.5 bg-emerald-700 text-white rounded text-xs font-semibold hover:bg-emerald-800 transition disabled:opacity-30 disabled:hover:bg-emerald-700 whitespace-nowrap"
-                          >
-                            {actionLoading === `download_${st.id}` ? "…" : "Télécharger"}
-                          </button>
+                          {/* Actions différenciées selon la division */}
+                          {isPrimary ? (() => {
+                            const pStatus = primaryBulletinStatuses[st.id] || { isGenerated: false };
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestGeneration(st)}
+                                  disabled={isBusy}
+                                  className={`px-2.5 py-1.5 rounded text-xs font-semibold transition inline-flex items-center gap-1 whitespace-nowrap ${
+                                    pStatus.isGenerated
+                                      ? "border border-emerald-400 text-emerald-700 hover:bg-emerald-50"
+                                      : "bg-emerald-700 text-white hover:bg-emerald-800"
+                                  } disabled:opacity-50`}
+                                >
+                                  {isBusy ? "Génération APC…" : pStatus.isGenerated ? "Régénérer" : "Générer APC"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewPdf(st.id, pStatus.pdfPath, true)}
+                                  disabled={!pStatus.isGenerated || actionLoading === `view_${st.id}`}
+                                  className="px-2.5 py-1.5 border border-line rounded text-xs font-semibold text-ink hover:bg-paper transition disabled:opacity-30 whitespace-nowrap"
+                                >
+                                  {actionLoading === `view_${st.id}` ? "…" : "Voir"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadPdf(st.id, pStatus.pdfPath, `${st.last_name}_${st.first_name}`, true)}
+                                  disabled={!pStatus.isGenerated || actionLoading === `download_${st.id}`}
+                                  className="px-2.5 py-1.5 bg-emerald-700 text-white rounded text-xs font-semibold hover:bg-emerald-800 transition disabled:opacity-30 whitespace-nowrap"
+                                >
+                                  {actionLoading === `download_${st.id}` ? "…" : "Télécharger"}
+                                </button>
+                              </>
+                            );
+                          })() : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleRequestGeneration(st)}
+                                disabled={isBusy}
+                                className={`px-2.5 py-1.5 rounded text-xs font-semibold transition inline-flex items-center gap-1 whitespace-nowrap ${
+                                  status.isGenerated
+                                    ? "border border-line text-slate hover:bg-paper"
+                                    : "bg-ink text-white hover:bg-opacity-90"
+                                } disabled:opacity-50`}
+                              >
+                                {isBusy ? "Génération…" : status.isGenerated ? "Régénérer" : "Générer"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleViewPdf(st.id, status.pdfPath)}
+                                disabled={!status.isGenerated || actionLoading === `view_${st.id}`}
+                                className="px-2.5 py-1.5 border border-line rounded text-xs font-semibold text-ink hover:bg-paper transition disabled:opacity-30 whitespace-nowrap"
+                              >
+                                {actionLoading === `view_${st.id}` ? "…" : "Voir"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadPdf(st.id, status.pdfPath, `${st.last_name}_${st.first_name}`)}
+                                disabled={!status.isGenerated || actionLoading === `download_${st.id}`}
+                                className="px-2.5 py-1.5 bg-emerald-700 text-white rounded text-xs font-semibold hover:bg-emerald-800 transition disabled:opacity-30 whitespace-nowrap"
+                              >
+                                {actionLoading === `download_${st.id}` ? "…" : "Télécharger"}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -476,6 +726,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         )}
       </div>
 
+      {/* MODALE D'AVERTISSEMENT (Notes Manquantes) */}
       {showWarningModal && pendingStudent && diagnostic && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white rounded border border-line max-w-md w-full p-6 space-y-4 shadow-xl">
@@ -529,6 +780,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
         </div>
       )}
 
+      {/* MODALE DE PRÉVISUALISATION DU PDF INTEGRÉE */}
       {previewPdfUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
           <div className="bg-white rounded-lg border border-line max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden">

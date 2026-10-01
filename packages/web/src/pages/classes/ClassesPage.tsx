@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   listClasses,
+  deleteClass,
   ClassRecord,
   supabase,
 } from "@fanion/shared";
@@ -54,6 +55,17 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
   const handleEditClick = (cls: ClassRecord) => {
     setEditingClass(cls);
     setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = async (cls: ClassRecord) => {
+    if (window.confirm(`Voulez-vous vraiment supprimer la classe "${cls.name}" ?\nAttention : Si des élèves ou des notes y sont attachés, la suppression pourrait échouer.`)) {
+      try {
+        await deleteClass(cls.id);
+        fetchClassesData();
+      } catch (err: any) {
+        alert("Erreur lors de la suppression de la classe : " + (err.message || ""));
+      }
+    }
   };
 
   const handleCreateClick = () => {
@@ -213,25 +225,36 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
                     </td>
                     {isWriteAuthorized && (
                       <td className="px-4 py-2.5 text-right">
-                        <button
-                          onClick={() => handleEditClick(cls)}
-                          className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
-                          title="Modifier"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEditClick(cls)}
+                            className="p-1.5 text-slate hover:text-ink hover:bg-paper rounded transition"
+                            title="Modifier"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(cls)}
+                            className="p-1.5 text-slate hover:text-signal-red hover:bg-signal-red/10 rounded transition"
+                            title="Supprimer"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -276,25 +299,36 @@ export const ClassesPage: React.FC<ClassesPageProps> = ({ userRole }) => {
                   </p>
                 </div>
                 {isWriteAuthorized && (
-                  <button
-                    onClick={() => handleEditClick(cls)}
-                    className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition flex-shrink-0"
-                    title="Modifier"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => handleEditClick(cls)}
+                      className="p-2 text-slate hover:text-ink hover:bg-paper rounded transition"
+                      title="Modifier"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                      />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(cls)}
+                      className="p-2 text-slate hover:text-signal-red hover:bg-signal-red/10 rounded transition"
+                      title="Supprimer"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

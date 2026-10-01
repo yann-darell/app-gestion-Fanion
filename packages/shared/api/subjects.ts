@@ -2,16 +2,35 @@ import { supabase } from "./supabaseClient";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+export interface DepartmentRecord {
+  id: string;
+  name: string;
+  head_teacher_id?: string | null;
+  created_at: string;
+  head_teacher?: {
+    id: string;
+    full_name: string;
+  } | null;
+}
+
+export interface DepartmentInput {
+  name: string;
+  head_teacher_id?: string | null;
+}
+
 export interface SubjectRecord {
   id: string;
   name: string;
   division_id: string;
+  department_id?: string | null;
   created_at: string;
+  department?: DepartmentRecord | null;
 }
 
 export interface SubjectInput {
   name: string;
   division_id: string;
+  department_id?: string | null;
 }
 
 export interface SubjectGroupRecord {
@@ -65,7 +84,7 @@ export interface SequenceRecord {
  * Liste les matières, optionnellement filtrées par division, triées par nom.
  */
 export async function listSubjects(divisionId?: string): Promise<SubjectRecord[]> {
-  let query = supabase.from("subjects").select("*");
+  let query = supabase.from("subjects").select("*, department:departments(*)");
   if (divisionId) {
     query = query.eq("division_id", divisionId);
   }
@@ -84,7 +103,7 @@ export async function createSubject(input: SubjectInput): Promise<SubjectRecord>
   const { data, error } = await supabase
     .from("subjects")
     .insert(input)
-    .select()
+    .select("*, department:departments(*)")
     .single();
   if (error) {
     console.error("Erreur createSubject:", error);
@@ -104,7 +123,7 @@ export async function updateSubject(
     .from("subjects")
     .update(input)
     .eq("id", id)
-    .select()
+    .select("*, department:departments(*)")
     .single();
   if (error) {
     console.error("Erreur updateSubject:", error);
@@ -121,6 +140,70 @@ export async function deleteSubject(id: string): Promise<void> {
   const { error } = await supabase.from("subjects").delete().eq("id", id);
   if (error) {
     console.error("Erreur deleteSubject:", error);
+    throw error;
+  }
+}
+
+// ── Departments ──────────────────────────────────────────────────────────────
+
+/**
+ * Liste tous les départements pédagogiques avec les infos de leur chef d'équipe (enseignant).
+ */
+export async function listDepartments(): Promise<DepartmentRecord[]> {
+  const { data, error } = await supabase
+    .from("departments")
+    .select("*, head_teacher:profiles!head_teacher_id(id, full_name)")
+    .order("name");
+  if (error) {
+    console.error("Erreur listDepartments:", error);
+    throw error;
+  }
+  return data as DepartmentRecord[];
+}
+
+/**
+ * Crée un département pédagogique.
+ */
+export async function createDepartment(input: DepartmentInput): Promise<DepartmentRecord> {
+  const { data, error } = await supabase
+    .from("departments")
+    .insert(input)
+    .select("*, head_teacher:profiles!head_teacher_id(id, full_name)")
+    .single();
+  if (error) {
+    console.error("Erreur createDepartment:", error);
+    throw error;
+  }
+  return data as DepartmentRecord;
+}
+
+/**
+ * Met à jour un département existant (nom, chef de département).
+ */
+export async function updateDepartment(
+  id: string,
+  input: Partial<DepartmentInput>
+): Promise<DepartmentRecord> {
+  const { data, error } = await supabase
+    .from("departments")
+    .update(input)
+    .eq("id", id)
+    .select("*, head_teacher:profiles!head_teacher_id(id, full_name)")
+    .single();
+  if (error) {
+    console.error("Erreur updateDepartment:", error);
+    throw error;
+  }
+  return data as DepartmentRecord;
+}
+
+/**
+ * Supprime un département.
+ */
+export async function deleteDepartment(id: string): Promise<void> {
+  const { error } = await supabase.from("departments").delete().eq("id", id);
+  if (error) {
+    console.error("Erreur deleteDepartment:", error);
     throw error;
   }
 }

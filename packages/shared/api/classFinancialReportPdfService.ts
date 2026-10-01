@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { ClassFinancialReport } from "./financialReportService";
 import { getSchoolSettings, SchoolSettings } from "../services/settingsService";
 import { LOGO_FANION_BASE64 } from "../assets/logoBase64";
+import { LOGO_PRIMAIRE_BASE64 } from "../assets/logoPrimaireBase64";
 
 function formatAmount(amt: number): string {
   return Math.round(amt || 0)
@@ -24,23 +25,43 @@ export async function generateClassFinancialReportPdf(
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
-  // Couleurs de la charte Fanion
-  const inkColor = rgb(0.082, 0.039, 0.368); // #150A5E
+  // 1. Détection de la division (primaire vs collège)
+  const isPrimary = report.divisionId === "primaire";
+
+  // Couleurs de la charte (Vert & Cyan pour Primaire, Indigo pour Collège)
+  const inkColor = isPrimary
+    ? rgb(0.176, 0.416, 0.176) // #2D6A2D Vert forêt
+    : rgb(0.082, 0.039, 0.368); // #150A5E
+  const accentColor = isPrimary
+    ? rgb(0.0, 0.651, 0.706) // #00A6B4 Cyan lagon
+    : rgb(0.356, 0.419, 0.51); // #5B6B82
   const slateColor = rgb(0.356, 0.419, 0.51); // #5B6B82
-  const lineColor = rgb(0.85, 0.85, 0.85);
-  const headerBgColor = rgb(0.94, 0.94, 0.97);
+  const lineColor = isPrimary
+    ? rgb(0.796, 0.910, 0.839) // #CBE8D6
+    : rgb(0.85, 0.85, 0.85);
+  const headerBgColor = isPrimary
+    ? rgb(0.922, 0.969, 0.941) // #EBF7F0
+    : rgb(0.94, 0.94, 0.97);
   const whiteColor = rgb(1, 1, 1);
   const greenColor = rgb(0.118, 0.478, 0.298); // #1E7A4C
   const goldColor = rgb(0.788, 0.604, 0.231); // #C99A3B
   const redColor = rgb(0.702, 0.263, 0.18); // #B3432E
-  const zebraBgColor = rgb(0.985, 0.985, 0.99);
+  const zebraBgColor = isPrimary
+    ? rgb(0.975, 0.990, 0.980)
+    : rgb(0.985, 0.985, 0.99);
 
-  // Logo officiel
+  // Logo officiel selon la division
   let logoImage: any = null;
   try {
-    const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
-    const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
-    logoImage = await pdfDoc.embedPng(logoBuffer);
+    if (isPrimary) {
+      const base64Data = LOGO_PRIMAIRE_BASE64.replace(/^data:image\/jpeg;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedJpg(logoBuffer);
+    } else {
+      const base64Data = LOGO_FANION_BASE64.replace(/^data:image\/png;base64,/, "");
+      const logoBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+      logoImage = await pdfDoc.embedPng(logoBuffer);
+    }
   } catch (e) {
     console.warn("Avertissement: Logo non chargé sur l'état financier:", e);
   }
@@ -70,11 +91,15 @@ export async function generateClassFinancialReportPdf(
       });
     }
 
-    // Coordonnées établissement (school_settings)
-    page.drawText(settings.name.toUpperCase(), {
+    // Coordonnées établissement (school_settings ou Primaire La Grâce)
+    const schoolName = isPrimary
+      ? "COMPLEXE SCOLAIRE BILINGUE LA GRÂCE"
+      : settings.name.toUpperCase();
+
+    page.drawText(schoolName, {
       x: 95,
       y: topY - 12,
-      size: 11,
+      size: isPrimary ? 10.5 : 11,
       font: fontBold,
       color: inkColor,
     });
@@ -126,7 +151,7 @@ export async function generateClassFinancialReportPdf(
       y: topY - 34,
       size: 8.5,
       font: fontBold,
-      color: slateColor,
+      color: isPrimary ? accentColor : slateColor,
     });
 
     const dateStr = new Date().toLocaleDateString("fr-FR", {

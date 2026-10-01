@@ -8,6 +8,7 @@ import {
   SequenceRecord,
   useSelectionPersistence,
   generateClassReportPdf,
+  listPrimaryMonths,
 } from "@fanion/shared";
 import {
   generateClassReport,
@@ -30,14 +31,22 @@ interface ClassReportPageProps {
 }
 
 export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) => {
-  const [selectedDivision, setSelectedDivision] = useSelectionPersistence("division", "college");
+  const [selectedDivision, setSelectedDivision] = useSelectionPersistence<"college" | "primaire">("division", "college");
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [selectedClassId, setSelectedClassId] = useSelectionPersistence("classId", "");
 
+  // Collège
   const [periodType, setPeriodType] = useSelectionPersistence<"sequence" | "term">("periodType", "sequence");
   const [terms, setTerms] = useState<TermRecord[]>([]);
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence("periodId", "");
+
+  // Primaire (mois & trimestres)
+  const [primaryPeriodType, setPrimaryPeriodType] = useSelectionPersistence<"month" | "term">("primaryClassReportPeriodType", "month");
+  const [primaryMonths, setPrimaryMonths] = useState<{ id: string; label: string; termLabel?: string }[]>([]);
+  const [selectedPrimaryPeriodId, setSelectedPrimaryPeriodId] = useSelectionPersistence("primaryClassReportPeriodId", "");
+
+  const isPrimary = selectedDivision === "primaire";
 
   const [reportData, setReportData] = useState<ClassReportData | null>(null);
   const [loadingInit, setLoadingInit] = useState(true);
@@ -60,8 +69,22 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         setClasses(classData);
         setTerms(termData);
         setSequences(seqData);
+
+        if (selectedDivision === "primaire") {
+          try {
+            const months = await listPrimaryMonths();
+            setPrimaryMonths(months);
+            if (months.length > 0) {
+              setSelectedPrimaryPeriodId((prev) =>
+                prev && months.some((m) => m.id === prev) ? prev : months[0].id
+              );
+            }
+          } catch (e) {
+            console.warn("Mois primaires non chargés dans bordereau:", e);
+          }
+        }
       } catch (err: any) {
-        console.error("Erreur d'initialisation du bordereau desktop:", err);
+        console.error("Erreur d'initialisation du bordereau web:", err);
         setError("Impossible de charger les données de configuration.");
       } finally {
         setLoadingInit(false);
@@ -70,6 +93,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     fetchInit();
   }, [selectedDivision]);
 
+  // Synchronisation période collège
   useEffect(() => {
     if (periodType === "sequence") {
       if (sequences.length > 0) {
@@ -82,30 +106,50 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     }
   }, [periodType, sequences, terms]);
 
+  // Synchronisation période primaire
+  useEffect(() => {
+    if (primaryPeriodType === "month") {
+      if (primaryMonths.length > 0) {
+        setSelectedPrimaryPeriodId((prev) =>
+          prev && primaryMonths.some((m) => m.id === prev) ? prev : primaryMonths[0].id
+        );
+      }
+    } else {
+      if (terms.length > 0) {
+        setSelectedPrimaryPeriodId((prev) =>
+          prev && terms.some((t) => t.id === prev) ? prev : terms[0].id
+        );
+      }
+    }
+  }, [primaryPeriodType, primaryMonths, terms]);
+
+  const activePeriodId = isPrimary ? selectedPrimaryPeriodId : selectedPeriodId;
+  const activePeriodType = isPrimary ? primaryPeriodType : periodType;
+
   const loadReport = useCallback(async () => {
-    if (!selectedClassId || !selectedPeriodId) return;
+    if (!selectedClassId || !activePeriodId) return;
     setLoadingReport(true);
     setError(null);
     try {
       const data = await generateClassReport(
         selectedClassId,
-        periodType,
-        selectedPeriodId
+        activePeriodType as any,
+        activePeriodId
       );
       setReportData(data);
     } catch (err: any) {
-      console.error("Erreur lors de la génération du bordereau desktop:", err);
+      console.error("Erreur lors de la génération du bordereau web:", err);
       setError("Erreur lors du calcul du bordereau de classe.");
     } finally {
       setLoadingReport(false);
     }
-  }, [selectedClassId, periodType, selectedPeriodId]);
+  }, [selectedClassId, activePeriodType, activePeriodId]);
 
   useEffect(() => {
-    if (selectedClassId && selectedPeriodId) {
+    if (selectedClassId && activePeriodId) {
       loadReport();
     }
-  }, [selectedClassId, selectedPeriodId, loadReport]);
+  }, [selectedClassId, activePeriodId, loadReport]);
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -116,10 +160,21 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     setError(null);
     try {
       const clsName = classes.find((c) => c.id === selectedClassId)?.name || "Classe";
-      const pLabel =
-        periodType === "sequence"
-          ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
-          : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
+      let pLabel = "";
+      if (isPrimary) {
+        if (primaryPeriodType === "month") {
+          const m = primaryMonths.find((m) => m.id === selectedPrimaryPeriodId);
+          pLabel = m ? `Mois de ${m.label}` : "Mois";
+        } else {
+          const t = terms.find((t) => t.id === selectedPrimaryPeriodId);
+          pLabel = t ? t.label : "Trimestre";
+        }
+      } else {
+        pLabel =
+          periodType === "sequence"
+            ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+            : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
+      }
 
       // Tentative de capture du graphique SVG Recharts en PNG via Canvas
       let chartImageBase64: string | null = null;
@@ -154,7 +209,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
           });
         }
       } catch (cErr) {
-        console.warn("Capture image Recharts non disponible sur desktop, utilisation du tracé natif:", cErr);
+        console.warn("Capture image Recharts non disponible, utilisation du tracé natif:", cErr);
       }
 
       const pdfBytes = await generateClassReportPdf({
@@ -174,7 +229,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
-      console.error("Erreur téléchargement bordereau PDF desktop:", err);
+      console.error("Erreur téléchargement bordereau PDF:", err);
       setError(err?.message || "Erreur lors de la génération du bordereau PDF.");
     } finally {
       setExportingPdf(false);
@@ -246,13 +301,13 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         {/* Classe */}
         <div className="flex-1 min-w-[180px]">
           <label
-            htmlFor="select-class-report-desktop"
+            htmlFor="select-class-report-web"
             className="block text-xs font-semibold text-slate uppercase mb-1"
           >
             Classe
           </label>
           <select
-            id="select-class-report-desktop"
+            id="select-class-report-web"
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink"
@@ -273,58 +328,125 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
             Période
           </label>
           <div className="flex gap-1 p-1 bg-paper border border-line rounded">
-            <button
-              type="button"
-              onClick={() => setPeriodType("sequence")}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                periodType === "sequence"
-                  ? "bg-ink text-white font-semibold"
-                  : "text-slate hover:bg-line/40"
-              }`}
-            >
-              Séquence
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriodType("term")}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                periodType === "term"
-                  ? "bg-ink text-white font-semibold"
-                  : "text-slate hover:bg-line/40"
-              }`}
-            >
-              Trimestre
-            </button>
+            {isPrimary ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPrimaryPeriodType("month")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    primaryPeriodType === "month"
+                      ? "bg-emerald-700 text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Mois
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrimaryPeriodType("term")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    primaryPeriodType === "term"
+                      ? "bg-emerald-700 text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Trimestre
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPeriodType("sequence")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    periodType === "sequence"
+                      ? "bg-ink text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Séquence
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeriodType("term")}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    periodType === "term"
+                      ? "bg-ink text-white font-semibold"
+                      : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Trimestre
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* Choix Période */}
         <div className="min-w-[160px]">
           <label
-            htmlFor="select-period-report-desktop"
+            htmlFor="select-period-report-web"
             className="block text-xs font-semibold text-slate uppercase mb-1"
           >
-            {periodType === "sequence" ? "Séquence" : "Trimestre"}
+            {isPrimary
+              ? primaryPeriodType === "month"
+                ? "Mois"
+                : "Trimestre"
+              : periodType === "sequence"
+              ? "Séquence"
+              : "Trimestre"}
           </label>
-          <select
-            id="select-period-report-desktop"
-            value={selectedPeriodId}
-            onChange={(e) => setSelectedPeriodId(e.target.value)}
-            className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink font-medium"
-            disabled={loadingInit}
-          >
-            {periodType === "sequence"
-              ? sequences.map((seq) => (
-                  <option key={seq.id} value={seq.id}>
-                    {seq.label}
+          {isPrimary ? (
+            primaryPeriodType === "month" ? (
+              <select
+                id="select-period-report-web"
+                value={selectedPrimaryPeriodId}
+                onChange={(e) => setSelectedPrimaryPeriodId(e.target.value)}
+                className="w-full px-3 py-2 border border-emerald-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 font-semibold"
+                disabled={loadingInit}
+              >
+                {primaryMonths.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} {m.termLabel ? `(${m.termLabel})` : ""}
                   </option>
-                ))
-              : terms.map((t) => (
+                ))}
+              </select>
+            ) : (
+              <select
+                id="select-period-report-web"
+                value={selectedPrimaryPeriodId}
+                onChange={(e) => setSelectedPrimaryPeriodId(e.target.value)}
+                className="w-full px-3 py-2 border border-emerald-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-emerald-600 font-semibold"
+                disabled={loadingInit}
+              >
+                {terms.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.label}
                   </option>
                 ))}
-          </select>
+              </select>
+            )
+          ) : (
+            <select
+              id="select-period-report-web"
+              value={selectedPeriodId}
+              onChange={(e) => setSelectedPeriodId(e.target.value)}
+              className="w-full px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-ink font-medium"
+              disabled={loadingInit}
+            >
+              {periodType === "sequence"
+                ? sequences.map((seq) => (
+                    <option key={seq.id} value={seq.id}>
+                      {seq.label}
+                    </option>
+                  ))
+                : terms.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+            </select>
+          )}
         </div>
       </div>
 

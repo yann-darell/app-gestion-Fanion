@@ -141,7 +141,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     recentPaymentsRes,
   ] = await Promise.all([
     supabase.from("classes").select("id, name, division_id, level").order("name"),
-    supabase.from("divisions").select("id, name"),
+    supabase.from("divisions").select("id, nom"),
     supabase.from("students").select("id, class_id, status"),
     supabase.from("teacher_assignments").select("id, class_id, subject_id"),
     activeSeq
@@ -194,7 +194,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
 
   // ─── A. Effectifs ────────────────────────────────────────────────────────────
   const divisionMap = new Map<string, string>();
-  divisions.forEach((d) => divisionMap.set(d.id, d.name));
+  divisions.forEach((d) => divisionMap.set(d.id, (d as any).nom ?? d.id));
 
   const classDivisionMap = new Map<string, string>();
   classes.forEach((c) => classDivisionMap.set(c.id, c.division_id));

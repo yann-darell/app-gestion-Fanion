@@ -133,13 +133,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = () => {
               <div className="text-3xl font-display font-bold text-ink">
                 {metrics.enrollment.totalActive}
               </div>
-              <div className="flex items-center justify-between text-xs text-slate mt-2 pt-2 border-t border-line/60">
-                <span>Total inscrits : <strong>{metrics.enrollment.totalStudents}</strong></span>
-                {metrics.enrollment.totalPending > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
-                    {metrics.enrollment.totalPending} en attente
-                  </span>
-                )}
+              <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-line/60">
+                <div className="flex items-center justify-between text-xs text-slate">
+                  <span>Total inscrits : <strong>{metrics.enrollment.totalStudents}</strong></span>
+                  {metrics.enrollment.totalPending > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                      {metrics.enrollment.totalPending} en attente
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
+                  {metrics.enrollment.byDivision.map((div) => (
+                    <span key={div.divisionId} className="text-[10px] text-slate font-medium">
+                      {div.divisionName} : <strong className="text-ink">{div.totalStudents}</strong>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 

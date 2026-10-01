@@ -1,6 +1,9 @@
-import { app, BrowserWindow, protocol, net } from "electron";
+import { app, BrowserWindow, protocol, net, nativeTheme } from "electron";
 import path from "path";
 import { pathToFileURL } from "url";
+
+// Forcer le thème clair pour éviter les contrôles système noirs sous Windows en Dark Mode
+nativeTheme.themeSource = "light";
 
 const isDev = !app.isPackaged;
 
