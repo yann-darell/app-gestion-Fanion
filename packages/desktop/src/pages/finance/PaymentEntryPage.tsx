@@ -291,11 +291,11 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
   const liveAllocation: AllocationResult | null =
     category === "tuition" && feeSchedule && numAmount > 0
       ? allocatePaymentToInstallments(
-          feeSchedule.installments_json,
-          tuitionPaid,
-          numAmount,
-          feeOverride?.total_amount_override
-        )
+        feeSchedule.installments_json,
+        tuitionPaid,
+        numAmount,
+        feeOverride?.total_amount_override
+      )
       : null;
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
@@ -629,11 +629,10 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                   <button
                     type="button"
                     onClick={() => setCategory("registration")}
-                    className={`p-3 rounded border text-left flex flex-col transition ${
-                      category === "registration"
+                    className={`p-3 rounded border text-left flex flex-col transition ${category === "registration"
                         ? "border-ink bg-ink/5 ring-1 ring-ink"
                         : "border-line bg-paper hover:border-slate/50"
-                    }`}
+                      }`}
                   >
                     <span className="text-sm font-bold text-ink">Frais d'inscription</span>
                     <span className="text-xs text-slate mt-1">
@@ -646,11 +645,10 @@ export const PaymentEntryPage: React.FC<PaymentEntryPageProps> = ({ userRole }) 
                   <button
                     type="button"
                     onClick={() => setCategory("tuition")}
-                    className={`p-3 rounded border text-left flex flex-col transition ${
-                      category === "tuition"
+                    className={`p-3 rounded border text-left flex flex-col transition ${category === "tuition"
                         ? "border-ink bg-ink/5 ring-1 ring-ink"
                         : "border-line bg-paper hover:border-slate/50"
-                    }`}
+                      }`}
                   >
                     <span className="text-sm font-bold text-ink">Frais de scolarité</span>
                     <span className="text-xs text-slate mt-1">

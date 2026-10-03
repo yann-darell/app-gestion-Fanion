@@ -1,9 +1,12 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '.env') });
 import * as fs from 'fs';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { LOGO_PRIMAIRE_BASE64 } from './packages/shared/assets/logoPrimaireBase64';
+import { LOGO_PRIMAIRE_BASE64 } from './packages/shared/assets/logoPrimaireBase64.ts';
 
 // Modèle de définition des 11 compétences APC avec critères et barèmes officiels
 export interface CompetenceModel {
@@ -924,6 +927,6 @@ export async function generateTestBulletin(): Promise<string> {
   return outputPath;
 }
 
-if (require.main === module) {
+if (process.argv[1] === __filename) {
   generateTestBulletin().catch(console.error);
 }

@@ -18,6 +18,9 @@
     "build:web:teacher": "npm run build:teacher --workspace=@fanion/web"
   },
   "devDependencies": {
+    "@types/dotenv": "^6.1.1",
+    "@types/plist": "^3.0.5",
+    "@types/verror": "^1.10.11",
     "md-to-pdf": "^5.2.5",
     "puppeteer": "^25.11.0",
     "supabase": "^2.114.0",
