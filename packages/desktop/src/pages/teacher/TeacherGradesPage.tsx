@@ -21,6 +21,7 @@ import {
   getGradeSubmission,
   submitClassGrades,
 } from "@fanion/shared/api/grades";
+import { TeacherPrimaryGradesView } from "./components/TeacherPrimaryGradesView";
 
 interface TeacherGradesPageProps {
   userRole?: string;
@@ -32,6 +33,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
 
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
   const [selectedSequenceId, setSelectedSequenceId] = useSelectionPersistence("sequenceId", "");
+  const [isPrimaryClass, setIsPrimaryClass] = useState(false);
 
   const [students, setStudents] = useState<AssignedStudentRecord[]>([]);
   const [gradesMap, setGradesMap] = useState<Record<string, number>>({});
@@ -101,16 +103,36 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   const currentAssignment = assignments.find((a) => a.id === selectedAssignmentId);
 
   useEffect(() => {
-    if (currentAssignment && selectedSequenceId) {
+    if (currentAssignment) {
+      const checkPrimary = async () => {
+        try {
+          const { data: cls } = await supabase.from("classes").select("division_id").eq("id", currentAssignment.class_id).single();
+          if (cls && cls.division_id) {
+            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).single();
+            const divName = (div?.nom || "").toLowerCase();
+            setIsPrimaryClass(divName.includes("primaire") || divName.includes("primary") || divName.includes("maternelle"));
+          } else {
+            setIsPrimaryClass(false);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      checkPrimary();
+    }
+  }, [currentAssignment]);
+
+  useEffect(() => {
+    if (currentAssignment && selectedSequenceId && !isPrimaryClass) {
       fetchStudentsAndGrades(currentAssignment.class_id, currentAssignment.subject_id, selectedSequenceId);
       fetchCompetencyAndSubmission(currentAssignment.class_id, currentAssignment.subject_id, selectedSequenceId);
-    } else {
+    } else if (!isPrimaryClass) {
       setStudents([]);
       setGradesMap({});
       setCompetencyDescription("");
       setIsLockedBySubmission(false);
     }
-  }, [selectedAssignmentId, selectedSequenceId]);
+  }, [selectedAssignmentId, selectedSequenceId, isPrimaryClass]);
 
   const fetchCompetencyAndSubmission = async (classId: string, subjectId: string, sequenceId: string) => {
     try {
@@ -372,26 +394,32 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
           )}
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate uppercase mb-1">
-            Séquence
-          </label>
-          <select
-            value={selectedSequenceId}
-            onChange={(e) => setSelectedSequenceId(e.target.value)}
-            className="w-full px-3 py-2 border border-line rounded focus:outline-none focus:ring-1 focus:ring-ink bg-paper text-sm font-medium"
-          >
-            {sequences.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!isPrimaryClass && (
+          <div>
+            <label className="block text-xs font-semibold text-slate uppercase mb-1">
+              Séquence
+            </label>
+            <select
+              value={selectedSequenceId}
+              onChange={(e) => setSelectedSequenceId(e.target.value)}
+              className="w-full px-3 py-2 border border-line rounded focus:outline-none focus:ring-1 focus:ring-ink bg-paper text-sm font-medium"
+            >
+              {sequences.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
+      {isPrimaryClass && currentAssignment && (
+        <TeacherPrimaryGradesView currentAssignment={currentAssignment} userRole={userRole} />
+      )}
+
       {/* Bloc Compétence Évaluée intégrée (1 seul champ par matière/classe/séquence) */}
-      {currentAssignment && (
+      {currentAssignment && !isPrimaryClass && (
         <div className="bg-white border border-line rounded p-4 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
             <label className="block text-xs font-bold text-ink uppercase tracking-wide">
@@ -423,7 +451,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       )}
 
       {/* Grille de saisie des élèves */}
-      {loadingGrades ? (
+      {isPrimaryClass ? null : loadingGrades ? (
         <div className="py-8 text-center text-slate text-xs sm:text-sm">
           Chargement de la liste des élèves et des notes...
         </div>

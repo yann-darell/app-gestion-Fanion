@@ -21,6 +21,8 @@ import {
   AssignedStudentRecord,
   useSelectionPersistence,
 } from "@fanion/shared";
+import { listPrimaryApcStructure } from "@fanion/shared/api/grades";
+import { listPrimaryMonths } from "@fanion/shared/api/primaryBulletinPdfService";
 
 interface TeacherEvolutionPageProps {
   userRole?: string;
@@ -31,9 +33,15 @@ interface EvolutionDataPoint {
   averageScore: number;
 }
 
+interface PeriodColumn {
+  id: string;
+  label: string;
+  shortLabel: string;
+}
+
 interface SubjectReportRow {
   student: AssignedStudentRecord;
-  sequenceScores: Record<string, number | null>; // sequence_id -> note
+  sequenceScores: Record<string, number | null>; // period_id -> note sur 20
   average: number | null;
 }
 
@@ -42,8 +50,13 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
   const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence("assignmentId", "");
 
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
+  const [primaryMonths, setPrimaryMonths] = useState<any[]>([]);
+  const [isPrimaryClass, setIsPrimaryClass] = useState(false);
+  const [classLevel, setClassLevel] = useState("");
+
   const [evolutionData, setEvolutionData] = useState<EvolutionDataPoint[]>([]);
   const [reportRows, setReportRows] = useState<SubjectReportRow[]>([]);
+  const [activePeriods, setActivePeriods] = useState<PeriodColumn[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -73,13 +86,23 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       setAssignments(assignmentsData);
 
       if (assignmentsData.length > 0) {
-        setSelectedAssignmentId((prev) => (prev && assignmentsData.some(a => a.id === prev) ? prev : assignmentsData[0].id));
+        setSelectedAssignmentId((prev) => (prev && assignmentsData.some((a) => a.id === prev) ? prev : assignmentsData[0].id));
       }
 
+      // 1. Séquences collège
       const seqsData = await listSequences();
-      // Trier par order_index
       seqsData.sort((a, b) => a.order_index - b.order_index);
       setSequences(seqsData);
+
+      // 2. Mois primaire
+      const { data: activeYear } = await supabase.from("school_years").select("id").eq("is_active", true).maybeSingle();
+      let yearId = activeYear?.id;
+      if (!yearId) {
+        const { data: latestYear } = await supabase.from("school_years").select("id").order("created_at", { ascending: false }).limit(1).maybeSingle();
+        yearId = latestYear?.id;
+      }
+      const months = await listPrimaryMonths(yearId);
+      setPrimaryMonths(months);
     } catch (err: any) {
       console.error("Erreur attributions desktop:", err);
       setError("Impossible de charger vos attributions.");
@@ -90,21 +113,65 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
 
   const currentAssignment = assignments.find((a) => a.id === selectedAssignmentId);
 
+  // Détecter si la classe sélectionnée est primaire / maternelle
   useEffect(() => {
-    if (currentAssignment && sequences.length > 0) {
-      fetchEvolutionAndBordereau(currentAssignment.class_id, currentAssignment.subject_id);
+    if (currentAssignment) {
+      const checkPrimary = async () => {
+        try {
+          const { data: cls } = await supabase
+            .from("classes")
+            .select("division_id, level")
+            .eq("id", currentAssignment.class_id)
+            .single();
+
+          if (cls && cls.division_id) {
+            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).single();
+            const divName = (div?.nom || "").toLowerCase();
+            const isPri = divName.includes("primaire") || divName.includes("primary") || divName.includes("maternelle");
+            setIsPrimaryClass(isPri);
+            setClassLevel(cls.level || "");
+          } else {
+            setIsPrimaryClass(false);
+            setClassLevel(cls?.level || "");
+          }
+        } catch (e) {
+          console.error("Erreur détection primaire desktop:", e);
+          setIsPrimaryClass(false);
+        }
+      };
+      checkPrimary();
+    }
+  }, [currentAssignment]);
+
+  useEffect(() => {
+    if (currentAssignment) {
+      if (isPrimaryClass) {
+        fetchEvolutionPrimary(currentAssignment.class_id, classLevel);
+      } else if (sequences.length > 0) {
+        fetchEvolutionSecondary(currentAssignment.class_id, currentAssignment.subject_id);
+      }
     } else {
       setEvolutionData([]);
       setReportRows([]);
+      setActivePeriods([]);
     }
-  }, [selectedAssignmentId, sequences]);
+  }, [selectedAssignmentId, sequences, primaryMonths, isPrimaryClass, classLevel]);
 
-  const fetchEvolutionAndBordereau = async (classId: string, subjectId: string) => {
+  // ==========================================
+  // Traitement Secondaire / Collège
+  // ==========================================
+  const fetchEvolutionSecondary = async (classId: string, subjectId: string) => {
     try {
       setLoadingChart(true);
       setError(null);
 
-      // 1. Récupérer les élèves de la classe
+      const periodCols: PeriodColumn[] = sequences.slice(0, 6).map((s, idx) => ({
+        id: s.id,
+        label: s.label,
+        shortLabel: `S${idx + 1}`,
+      }));
+      setActivePeriods(periodCols);
+
       let studentsData: AssignedStudentRecord[];
       if (userRole === "enseignant") {
         studentsData = await listMyAssignedStudents(classId, subjectId);
@@ -125,30 +192,21 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
         return;
       }
 
-      // 2. Récupérer les notes réelles directement de la table grades pour cette matière
       const studentIds = studentsData.map((s) => s.id);
       const allGrades = await listGrades({ subject_id: subjectId });
       const subjectGrades = allGrades.filter((g) => studentIds.includes(g.student_id));
 
-      // 3. Calculer les points du graphique pour chaque séquence
-      const chartPoints: EvolutionDataPoint[] = sequences.map((seq) => {
+      const chartPoints: EvolutionDataPoint[] = sequences.slice(0, 6).map((seq) => {
         const seqGrades = subjectGrades.filter((g) => g.sequence_id === seq.id);
         if (seqGrades.length === 0) {
-          return {
-            sequenceLabel: seq.label,
-            averageScore: 0,
-          };
+          return { sequenceLabel: seq.label, averageScore: 0 };
         }
         const sum = seqGrades.reduce((acc, curr) => acc + curr.score, 0);
         const avg = Math.round((sum / seqGrades.length) * 100) / 100;
-        return {
-          sequenceLabel: seq.label,
-          averageScore: avg,
-        };
+        return { sequenceLabel: seq.label, averageScore: avg };
       });
       setEvolutionData(chartPoints);
 
-      // 4. Construire les lignes du Bordereau de matière (1 ligne par élève, Séquences 1 à 6)
       const rows: SubjectReportRow[] = studentsData.map((st) => {
         const seqScores: Record<string, number | null> = {};
         const studentGrades = subjectGrades.filter((g) => g.student_id === st.id);
@@ -156,7 +214,7 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
         let sum = 0;
         let count = 0;
 
-        sequences.forEach((seq) => {
+        sequences.slice(0, 6).forEach((seq) => {
           const g = studentGrades.find((grade) => grade.sequence_id === seq.id);
           if (g && typeof g.score === "number") {
             seqScores[seq.id] = g.score;
@@ -176,8 +234,128 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
 
       setReportRows(rows);
     } catch (err: any) {
-      console.error("Erreur calcul évolution & bordereau desktop:", err);
-      setError("Erreur lors du calcul des moyennes pour le graphique et le bordereau.");
+      console.error("Erreur calcul évolution collège desktop:", err);
+      setError("Erreur lors du calcul des moyennes collège.");
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
+  // ==========================================
+  // Traitement Primaire / Maternelle (Mois APC)
+  // ==========================================
+  const fetchEvolutionPrimary = async (classId: string, level: string) => {
+    try {
+      setLoadingChart(true);
+      setError(null);
+
+      const periodCols: PeriodColumn[] = primaryMonths.map((m, idx) => ({
+        id: m.id,
+        label: m.label,
+        shortLabel: `M${idx + 1}`,
+      }));
+      setActivePeriods(periodCols);
+
+      let studentsData: AssignedStudentRecord[];
+      if (userRole === "enseignant") {
+        studentsData = await listMyAssignedStudents(classId, currentAssignment?.subject_id || "");
+      } else {
+        const fullStudents = await listStudents({ classId, status: "active" });
+        studentsData = fullStudents.map((s) => ({
+          id: s.id,
+          matricule: s.matricule || "",
+          first_name: s.first_name,
+          last_name: s.last_name,
+          status: s.status || "active",
+        }));
+      }
+
+      if (studentsData.length === 0) {
+        setEvolutionData([]);
+        setReportRows([]);
+        return;
+      }
+
+      const monthIds = primaryMonths.map((m) => m.id);
+      const { data: evals } = await supabase
+        .from("primary_evaluations")
+        .select("id, primary_month_id")
+        .in("primary_month_id", monthIds);
+
+      const evalIds = (evals || []).map((e) => e.id);
+
+      const { subEvaluations, scales } = await listPrimaryApcStructure(level);
+      const scaleMap = new Map<string, number>();
+      scales.forEach((s) => scaleMap.set(s.sub_evaluation_id, Number(s.max_score) || 10));
+
+      let totalMaxRef = 0;
+      subEvaluations.forEach((sub) => {
+        totalMaxRef += scaleMap.get(sub.id) ?? 10;
+      });
+      if (totalMaxRef === 0) totalMaxRef = 100;
+
+      let rawGrades: any[] = [];
+      if (evalIds.length > 0) {
+        const { data: gData } = await supabase
+          .from("primary_grades")
+          .select("student_id, primary_evaluation_id, sub_evaluation_id, score")
+          .in("primary_evaluation_id", evalIds)
+          .in("student_id", studentsData.map((s) => s.id));
+        rawGrades = gData || [];
+      }
+
+      const rows: SubjectReportRow[] = studentsData.map((st) => {
+        const seqScores: Record<string, number | null> = {};
+        let totalSum = 0;
+        let monthCount = 0;
+
+        primaryMonths.forEach((m) => {
+          const evalItem = (evals || []).find((e) => e.primary_month_id === m.id);
+          if (!evalItem) {
+            seqScores[m.id] = null;
+            return;
+          }
+
+          const stGrades = rawGrades.filter(
+            (g) => g.student_id === st.id && g.primary_evaluation_id === evalItem.id
+          );
+
+          if (stGrades.length === 0) {
+            seqScores[m.id] = null;
+          } else {
+            const sumScore = stGrades.reduce((acc, curr) => acc + Number(curr.score || 0), 0);
+            const scoreSur20 = Math.round(((sumScore / totalMaxRef) * 20) * 100) / 100;
+            seqScores[m.id] = scoreSur20;
+            totalSum += scoreSur20;
+            monthCount++;
+          }
+        });
+
+        return {
+          student: st,
+          sequenceScores: seqScores,
+          average: monthCount > 0 ? Math.round((totalSum / monthCount) * 100) / 100 : null,
+        };
+      });
+
+      const chartPoints: EvolutionDataPoint[] = primaryMonths.map((m) => {
+        const validMonthScores = rows
+          .map((r) => r.sequenceScores[m.id])
+          .filter((s) => s !== null && s !== undefined) as number[];
+
+        if (validMonthScores.length === 0) {
+          return { sequenceLabel: m.label, averageScore: 0 };
+        }
+        const sum = validMonthScores.reduce((acc, curr) => acc + curr, 0);
+        const avg = Math.round((sum / validMonthScores.length) * 100) / 100;
+        return { sequenceLabel: m.label, averageScore: avg };
+      });
+
+      setEvolutionData(chartPoints);
+      setReportRows(rows);
+    } catch (err: any) {
+      console.error("Erreur calcul évolution primaire desktop:", err);
+      setError("Erreur lors du calcul des moyennes primaire.");
     } finally {
       setLoadingChart(false);
     }
@@ -191,18 +369,25 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
     );
   }
 
-  // Filtrer les séquences 1 à 6 (ou l'ensemble disponible ordonné)
-  const displaySequences = sequences.slice(0, 6);
-
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      <div className="border-b border-line pb-4">
-        <h1 className="text-xl sm:text-2xl font-display font-bold text-ink">
-          Évolution de mes élèves
-        </h1>
-        <p className="text-xs sm:text-sm text-slate mt-0.5">
-          Tendance des moyennes et bordereau de notes par séquence pour votre matière assignée
-        </p>
+      <div className="border-b border-line pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-display font-bold text-ink">
+            Évolution de mes élèves
+          </h1>
+          <p className="text-xs sm:text-sm text-slate mt-0.5">
+            {isPrimaryClass
+              ? "Tendance des moyennes mensuelles et bordereau APC pour votre classe primaire (Desktop)"
+              : "Tendance des moyennes et bordereau de notes par séquence pour votre matière assignée (Desktop)"}
+          </p>
+        </div>
+
+        {isPrimaryClass && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold self-start sm:self-auto">
+            <span>Cycle Primaire (Évaluations mensuelles APC)</span>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -211,7 +396,7 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
         </div>
       )}
 
-      {/* Sélecteur Classe / Matière */}
+      {/* Sélecteur Classe & Matière */}
       <div className="bg-white border border-line rounded p-4 shadow-sm">
         <label className="block text-xs font-semibold text-slate uppercase mb-1">
           Sélectionner Classe &amp; Matière
@@ -242,51 +427,53 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       ) : (
         <>
           {/* Graphique en Ligne des Moyennes */}
-          <div className="bg-white border border-line rounded p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
-                Moyenne de la classe dans votre matière (sur 20)
+          <div className="bg-white border border-line rounded p-3 sm:p-6 shadow-sm space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
+              <h3 className="text-xs sm:text-sm font-bold text-ink uppercase tracking-wide">
+                Moyenne de la classe (sur 20)
               </h3>
               {currentAssignment && (
-                <span className="text-xs font-semibold text-slate bg-paper px-2.5 py-1 rounded border border-line">
+                <span className="text-[11px] sm:text-xs font-semibold text-slate bg-paper px-2 py-0.5 sm:px-2.5 sm:py-1 rounded border border-line self-start sm:self-auto">
                   {currentAssignment.class_name} — {currentAssignment.subject_name}
                 </span>
               )}
             </div>
 
-            <div className="h-72 w-full pt-4">
+            <div className="h-56 sm:h-72 w-full pt-2 sm:pt-4 -ml-2 sm:ml-0">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={evolutionData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <LineChart data={evolutionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E4E0D6" />
-                  <XAxis dataKey="sequenceLabel" stroke="#5B6B82" fontSize={12} />
-                  <YAxis domain={[0, 20]} stroke="#5B6B82" fontSize={12} />
+                  <XAxis dataKey="sequenceLabel" stroke="#5B6B82" fontSize={11} tickLine={false} />
+                  <YAxis domain={[0, 20]} stroke="#5B6B82" fontSize={11} tickCount={5} />
                   <Tooltip
-                    formatter={(val: any) => [`${val} / 20`, "Moyenne Matière"]}
-                    contentStyle={{ backgroundColor: "#FAF9F5", borderColor: "#E4E0D6", borderRadius: "4px" }}
+                    formatter={(val: any) => [`${val} / 20`, isPrimaryClass ? "Moyenne Mensuelle" : "Moyenne Matière"]}
+                    contentStyle={{ backgroundColor: "#FAF9F5", borderColor: "#E4E0D6", borderRadius: "4px", fontSize: "12px" }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
                   <Line
                     type="monotone"
                     dataKey="averageScore"
-                    name="Moyenne Matière"
+                    name={isPrimaryClass ? "Moyenne Mensuelle" : "Moyenne Matière"}
                     stroke="#150A5E"
-                    strokeWidth={3}
-                    activeDot={{ r: 8 }}
+                    strokeWidth={2.5}
+                    activeDot={{ r: 6 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Tableau "Bordereau de matière" (8 colonnes : N°, Matricule, Nom, Séquence 1 à 6) */}
+          {/* Section Bordereau Desktop */}
           <div className="bg-white border border-line rounded shadow-sm overflow-hidden space-y-2">
-            <div className="p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="p-3 sm:p-4 border-b border-line bg-paper/50 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
               <div>
-                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
-                  Bordereau de matière : {currentAssignment?.subject_name}
+                <h3 className="text-xs sm:text-sm font-bold text-ink uppercase tracking-wide">
+                  {isPrimaryClass
+                    ? `Bordereau mensuel : ${currentAssignment?.class_name}`
+                    : `Bordereau de matière : ${currentAssignment?.subject_name}`}
                 </h3>
-                <p className="text-xs text-slate mt-0.5">
-                  Récapitulatif des notes des {reportRows.length} élève(s) de {currentAssignment?.class_name} sur les 6 séquences
+                <p className="text-[11px] sm:text-xs text-slate mt-0.5">
+                  Récapitulatif des notes des {reportRows.length} élève(s) de {currentAssignment?.class_name} sur les {activePeriods.length} périodes
                 </p>
               </div>
             </div>
@@ -303,17 +490,12 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
                       <th className="py-2.5 px-3 w-10 text-center">N°</th>
                       <th className="py-2.5 px-3 w-28">Matricule</th>
                       <th className="py-2.5 px-3">Nom et Prénom</th>
-                      {displaySequences.map((seq, idx) => (
-                        <th key={seq.id} className="py-2.5 px-3 text-center w-20">
-                          Seq {idx + 1}
+                      {activePeriods.map((period) => (
+                        <th key={period.id} className="py-2.5 px-3 text-center min-w-[70px]">
+                          {period.label}
                         </th>
                       ))}
-                      {/* Compléter à 6 colonnes de séquences si moins de séquences configurées */}
-                      {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
-                        <th key={`empty-seq-${i}`} className="py-2.5 px-3 text-center w-20 text-slate/40">
-                          Seq {displaySequences.length + i + 1}
-                        </th>
-                      ))}
+                      <th className="py-2.5 px-3 text-center w-24">Moyenne</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
@@ -328,10 +510,10 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
                         <td className="py-2 px-3 font-semibold text-ink">
                           {row.student.last_name} {row.student.first_name}
                         </td>
-                        {displaySequences.map((seq) => {
-                          const score = row.sequenceScores[seq.id];
+                        {activePeriods.map((period) => {
+                          const score = row.sequenceScores[period.id];
                           return (
-                            <td key={seq.id} className="py-2 px-3 text-center font-mono font-bold">
+                            <td key={period.id} className="py-2 px-3 text-center font-mono font-bold">
                               {score !== null && score !== undefined ? (
                                 <span className={score < 10 ? "text-signal-red" : "text-ink"}>
                                   {score.toFixed(2)}
@@ -342,11 +524,15 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
                             </td>
                           );
                         })}
-                        {Array.from({ length: Math.max(0, 6 - displaySequences.length) }).map((_, i) => (
-                          <td key={`empty-cell-${i}`} className="py-2 px-3 text-center text-slate/30">
-                            --
-                          </td>
-                        ))}
+                        <td className="py-2 px-3 text-center font-mono font-bold">
+                          {row.average !== null ? (
+                            <span className={row.average < 10 ? "text-signal-red font-bold" : "text-[#150A5E]"}>
+                              {row.average.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-slate/40">--</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
