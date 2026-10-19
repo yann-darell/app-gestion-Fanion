@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { CheckIcon } from "../../../components/ui/Icons";
 import {
   supabase,
-  listStudents,
+  listMyAssignedStudents,
   AssignedStudentRecord,
   listPrimaryApcStructure,
   getOrCreatePrimaryEvaluationForMonth,
@@ -81,16 +81,8 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
       const evalId = await getOrCreatePrimaryEvaluationForMonth(monthId);
       setPrimaryEvalId(evalId);
 
-      // Au primaire, la maîtresse gère toute la classe — on charge tous les élèves actifs
-      // sans filtrer par attribution matière (pas de logique collège ici)
-      const fullStudents = await listStudents({ classId, status: "active" });
-      const studentsData: AssignedStudentRecord[] = fullStudents.map(s => ({
-        id: s.id,
-        matricule: s.matricule || "",
-        first_name: s.first_name,
-        last_name: s.last_name,
-        status: s.status || "active",
-      }));
+      // Au primaire, la maîtresse gère toute la classe — récupération sécurisée via RPC/RLS
+      const studentsData = await listMyAssignedStudents(classId, "primaire-titulaire");
       setStudents(studentsData);
 
       const gradesData = await listPrimaryGrades(evalId, studentsData.map(s => s.id));
@@ -205,8 +197,15 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line/60 text-sm">
-                    {students.map((student, idx) => {
-                      const { total, maxTotal } = getDomainTotal(student.id, domain);
+                    {students.length === 0 ? (
+                      <tr>
+                        <td colSpan={domainSubs.length + 3} className="px-4 py-8 text-center text-xs text-slate italic bg-paper/20">
+                          Aucun élève actif trouvé dans cette classe.
+                        </td>
+                      </tr>
+                    ) : (
+                      students.map((student, idx) => {
+                        const { total, maxTotal } = getDomainTotal(student.id, domain);
                       return (
                         <tr key={student.id} className="hover:bg-paper/30 transition">
                           <td className="px-4 py-2 text-center text-xs font-mono text-slate">{idx + 1}</td>
@@ -249,7 +248,7 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>

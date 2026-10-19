@@ -307,7 +307,20 @@ export async function listMyAssignedStudents(
     subjectId: string,
 ): Promise<AssignedStudentRecord[]> {
     // Si attribution titulaire primaire
-    if (subjectId === "primaire-titulaire" || !subjectId) {
+    if (subjectId === "primaire-titulaire" || subjectId === "primaire" || !subjectId) {
+        // 1. Essai via RPC SECURITY DEFINER (migration 029)
+        try {
+            const { data: rpcData, error: rpcErr } = await supabase.rpc("get_my_primary_assigned_students", {
+                p_class_id: classId,
+            });
+            if (!rpcErr && rpcData && rpcData.length > 0) {
+                return rpcData as AssignedStudentRecord[];
+            }
+        } catch (e) {
+            console.warn("RPC get_my_primary_assigned_students fallback:", e);
+        }
+
+        // 2. SELECT direct avec la policy RLS students_primary_teacher_select (migration 029)
         const { data, error } = await supabase
             .from("students")
             .select("id, matricule, first_name, last_name, status")
@@ -315,7 +328,10 @@ export async function listMyAssignedStudents(
             .eq("status", "active")
             .order("last_name")
             .order("first_name");
-        if (error) throw error;
+        if (error) {
+            console.error("Erreur SELECT students primaire:", error);
+            return [];
+        }
         return (data || []) as AssignedStudentRecord[];
     }
 
@@ -330,8 +346,15 @@ export async function listMyAssignedStudents(
         console.warn("RPC get_my_assigned_students fallback:", e);
     }
 
-    // Fallback : si c'est une classe primaire
-    const { data: stds, error: stdsErr } = await supabase
+    // Fallback : essai via RPC primaire puis SELECT direct
+    try {
+        const { data: pData } = await supabase.rpc("get_my_primary_assigned_students", {
+            p_class_id: classId,
+        });
+        if (pData && pData.length > 0) return pData as AssignedStudentRecord[];
+    } catch (e) {}
+
+    const { data: stds } = await supabase
         .from("students")
         .select("id, matricule, first_name, last_name, status")
         .eq("class_id", classId)
@@ -339,11 +362,7 @@ export async function listMyAssignedStudents(
         .order("last_name")
         .order("first_name");
 
-    if (!stdsErr && stds) {
-        return stds as AssignedStudentRecord[];
-    }
-
-    return [];
+    return (stds || []) as AssignedStudentRecord[];
 }
 
 // ─────────────────────────────────────────────────────────────

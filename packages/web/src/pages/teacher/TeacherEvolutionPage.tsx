@@ -282,15 +282,8 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       }));
       setActivePeriods(periodCols);
 
-      // Au primaire, la maîtresse gère toute la classe — pas de filtre par attribution matière
-      const fullStudents = await listStudents({ classId, status: "active" });
-      const studentsData: AssignedStudentRecord[] = fullStudents.map((s) => ({
-        id: s.id,
-        matricule: s.matricule || "",
-        first_name: s.first_name,
-        last_name: s.last_name,
-        status: s.status || "active",
-      }));
+      // Au primaire, récupération des élèves de la classe via RPC et RLS
+      const studentsData = await listMyAssignedStudents(classId, "primaire-titulaire");
 
       if (studentsData.length === 0) {
         setEvolutionData([]);
