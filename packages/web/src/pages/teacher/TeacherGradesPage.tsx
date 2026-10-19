@@ -436,7 +436,11 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       </div>
 
       {isPrimaryClass && currentAssignment && (
-        <TeacherPrimaryGradesView currentAssignment={currentAssignment} />
+        <TeacherPrimaryGradesView
+          currentAssignment={currentAssignment}
+          currentUserId={currentUserId}
+          isTeacher={isTeacher}
+        />
       )}
 
       {/* Bloc Compétence Évaluée intégrée (1 seul champ par matière/classe/séquence) */}

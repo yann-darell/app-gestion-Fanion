@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { CheckIcon } from "../../../components/ui/Icons";
+import { CheckIcon, CheckCircleIcon, AlertTriangleIcon, LockIcon } from "../../../components/ui/Icons";
 import {
   supabase,
-  listMyAssignedStudents,
   AssignedStudentRecord,
   listPrimaryApcStructure,
   getOrCreatePrimaryEvaluationForMonth,
   listPrimaryGrades,
   upsertPrimaryGrade,
   listPrimaryMonths,
+  submitClassGrades,
+  getGradeSubmission,
 } from "@fanion/shared";
 
 interface TeacherPrimaryGradesViewProps {
   currentAssignment: any;
+  currentUserId?: string | null;
+  isTeacher?: boolean;
 }
 
-export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> = ({ currentAssignment }) => {
+export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> = ({ currentAssignment, currentUserId, isTeacher }) => {
   const [primaryMonths, setPrimaryMonths] = useState<any[]>([]);
   const [selectedMonthId, setSelectedMonthId] = useState<string>("");
   
@@ -31,6 +34,12 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
   const [savedPrimaryCell, setSavedPrimaryCell] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Soumission des notes primaires
+  const [submitting, setSubmitting] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [submissionDate, setSubmissionDate] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentAssignment?.class_id) {
@@ -81,9 +90,41 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
       const evalId = await getOrCreatePrimaryEvaluationForMonth(monthId);
       setPrimaryEvalId(evalId);
 
-      // Au primaire, la maîtresse gère toute la classe — récupération sécurisée via RPC/RLS
-      const studentsData = await listMyAssignedStudents(classId, "primaire-titulaire");
+      // Récupération des élèves : SELECT direct (fiable avec RLS students_primary_teacher_select)
+      let studentsData: AssignedStudentRecord[] = [];
+      try {
+        const { data: directData, error: directErr } = await supabase
+          .from("students")
+          .select("id, matricule, first_name, last_name, status")
+          .eq("class_id", classId)
+          .eq("status", "active")
+          .order("last_name")
+          .order("first_name");
+        if (!directErr && directData && directData.length > 0) {
+          studentsData = directData as AssignedStudentRecord[];
+        } else {
+          // Fallback RPC SECURITY DEFINER
+          const { data: rpcData } = await supabase.rpc("get_my_primary_assigned_students", { p_class_id: classId });
+          if (rpcData && rpcData.length > 0) studentsData = rpcData as AssignedStudentRecord[];
+        }
+      } catch (e) {
+        console.warn("Erreur chargement élèves primaires:", e);
+      }
       setStudents(studentsData);
+
+      // Statut de soumission pour ce mois
+      try {
+        const sub = await getGradeSubmission(classId, "primaire-titulaire", monthId);
+        if (sub && sub.is_locked) {
+          setIsLocked(true);
+          setSubmissionDate(sub.submitted_at);
+        } else {
+          setIsLocked(false);
+          setSubmissionDate(null);
+        }
+      } catch (e) {
+        console.warn("Erreur statut soumission primaire:", e);
+      }
 
       const gradesData = await listPrimaryGrades(evalId, studentsData.map(s => s.id));
       const pMap: Record<string, Record<string, number>> = {};
@@ -94,6 +135,29 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
       setPrimaryGradeMap(pMap);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSubmitPrimaryGrades = async () => {
+    if (!currentAssignment?.class_id || !selectedMonthId || !currentUserId) return;
+    const confirmMsg = "Êtes-vous sûr de vouloir valider les notes de la classe pour ce mois ?\n\nUne fois validées, elles seront verrouillées.";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      setSubmitting(true);
+      setError(null);
+      const res = await submitClassGrades(
+        currentAssignment.class_id,
+        "primaire-titulaire",
+        selectedMonthId,
+        currentUserId
+      );
+      setIsLocked(true);
+      setSubmissionDate(res.submitted_at);
+      setSuccessMessage("Notes du mois validées et verrouillées avec succès.");
+    } catch (err: any) {
+      setError(err.message || "Erreur lors de la validation.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -143,8 +207,9 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
   return (
     <div className="space-y-6">
       {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded">{error}</div>}
+      {successMessage && <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded font-medium">{successMessage}</div>}
       
-      <div className="bg-white border border-line rounded p-4 shadow-sm">
+      <div className="bg-white border border-line rounded p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
         <label className="block text-xs font-semibold text-slate uppercase mb-1">Mois (Période)</label>
         <select
           value={selectedMonthId}
@@ -155,6 +220,13 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
             <option key={m.id} value={m.id}>{m.label} {m.termLabel ? `(${m.termLabel})` : ""}</option>
           ))}
         </select>
+        {isLocked && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-fanion-green text-xs font-bold whitespace-nowrap">
+            <LockIcon className="w-3.5 h-3.5" />
+            Notes verrouillées
+            {submissionDate && <span className="text-[11px] font-normal text-slate ml-1">({new Date(submissionDate).toLocaleDateString("fr-FR")})</span>}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-800 font-medium">
@@ -255,6 +327,40 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
             </div>
           );
         })
+      )}
+
+      {/* Barre de validation globale pour le primaire */}
+      {students.length > 0 && (!isLocked || !isTeacher) && (
+        <div className="fixed bottom-16 left-0 right-0 z-20 md:static bg-white/95 md:bg-paper/30 backdrop-blur-md md:backdrop-blur-none border-t border-line p-3 sm:p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] md:shadow-none flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-xs text-slate w-full sm:w-auto text-center sm:text-left">
+            {isLocked ? (
+              <span className="text-fanion-green font-medium flex items-center justify-center sm:justify-start gap-1.5">
+                <CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" />
+                <span>Notes du mois validées et transmises.</span>
+              </span>
+            ) : (
+              <span className="text-slate flex items-center gap-1.5">
+                <AlertTriangleIcon className="w-4 h-4 flex-shrink-0" />
+                Sauvegarde automatique par champ — cliquez Valider quand la saisie est complète.
+              </span>
+            )}
+          </div>
+          {!isLocked && (
+            <button
+              type="button"
+              id="btn-validate-primary-grades"
+              disabled={submitting}
+              onClick={handleSubmitPrimaryGrades}
+              className={`w-full sm:w-auto px-5 py-2.5 rounded text-xs sm:text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-2 ${
+                !submitting
+                  ? "bg-fanion-green hover:bg-emerald-700 text-white cursor-pointer active:scale-98"
+                  : "bg-slate/20 text-slate/60 cursor-not-allowed"
+              }`}
+            >
+              {submitting ? "Validation en cours..." : "Valider et envoyer les notes du mois"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
