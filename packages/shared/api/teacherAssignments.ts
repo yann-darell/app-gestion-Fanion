@@ -40,7 +40,41 @@ export async function listAssignments(filters?: {
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data as unknown as AssignmentRecord[]) ?? [];
+    const assignments: AssignmentRecord[] = (data as unknown as AssignmentRecord[]) ?? [];
+
+    // Récupérer également les attributions primaires pour la vue d'ensemble et les listes
+    try {
+        let ptaQuery = supabase
+            .from("primary_teacher_assignments")
+            .select(`
+              id, teacher_id, class_id, created_at,
+              profiles:teacher_id (id, full_name, role),
+              classes:class_id (id, name, level)
+            `);
+
+        if (filters?.classId) ptaQuery = ptaQuery.eq("class_id", filters.classId);
+        if (filters?.teacherId) ptaQuery = ptaQuery.eq("teacher_id", filters.teacherId);
+
+        const { data: ptaData, error: ptaError } = await ptaQuery;
+        if (!ptaError && ptaData) {
+            ptaData.forEach((row: any) => {
+                assignments.push({
+                    id: row.id,
+                    teacher_id: row.teacher_id,
+                    subject_id: "primaire",
+                    class_id: row.class_id,
+                    created_at: row.created_at,
+                    profiles: row.profiles,
+                    subjects: { id: "primaire", name: "Classe entière (Titulaire)" },
+                    classes: row.classes,
+                });
+            });
+        }
+    } catch (e) {
+        console.warn("Erreur chargement attributions primaires dans listAssignments:", e);
+    }
+
+    return assignments;
 }
 
 /**
@@ -126,26 +160,74 @@ export async function listTeacherAssignments(filters?: {
 
         // Récupérer également les attributions primaires de l'enseignant
         try {
-            const { data: ptaData, error: ptaErr } = await supabase
-                .from("primary_teacher_assignments")
-                .select(`
-                    id, teacher_id, class_id, created_at,
-                    classes:class_id (name)
-                `)
-                .eq("teacher_id", filters.teacher_id);
-
-            if (!ptaErr && ptaData) {
-                ptaData.forEach((row: any) => {
+            // 1. Essai via RPC SECURITY DEFINER (migration 028)
+            const { data: ptaRpc, error: rpcErr } = await supabase.rpc("get_my_primary_teacher_assignments");
+            if (!rpcErr && ptaRpc && ptaRpc.length > 0) {
+                ptaRpc.forEach((row: any) => {
                     results.push({
                         id: row.id,
                         teacher_id: row.teacher_id,
                         subject_id: "primaire-titulaire",
                         class_id: row.class_id,
-                        class_name: row.classes?.name || "Classe Primaire",
+                        class_name: row.class_name || "Classe Primaire",
                         subject_name: "Toutes matières (Titulaire)",
                         created_at: row.created_at,
                     });
                 });
+            } else {
+                // 2. Fallback SELECT direct avec la policy RLS (migration 028)
+                const { data: ptaData } = await supabase
+                    .from("primary_teacher_assignments")
+                    .select(`
+                        id, teacher_id, class_id, created_at,
+                        classes:class_id (name)
+                    `)
+                    .eq("teacher_id", filters.teacher_id);
+
+                if (ptaData && ptaData.length > 0) {
+                    ptaData.forEach((row: any) => {
+                        results.push({
+                            id: row.id,
+                            teacher_id: row.teacher_id,
+                            subject_id: "primaire-titulaire",
+                            class_id: row.class_id,
+                            class_name: (row.classes as any)?.name || "Classe Primaire",
+                            subject_name: "Toutes matières (Titulaire)",
+                            created_at: row.created_at,
+                        });
+                    });
+                }
+            }
+
+            // 3. Fallback additionnel : vérifier si l'enseignant est titulaire via classes.head_teacher_name
+            const { data: myProfile } = await supabase
+                .from("profiles")
+                .select("full_name")
+                .eq("id", filters.teacher_id)
+                .maybeSingle();
+
+            if (myProfile?.full_name) {
+                const { data: headClasses } = await supabase
+                    .from("classes")
+                    .select("id, name, division_id")
+                    .eq("head_teacher_name", myProfile.full_name)
+                    .eq("division_id", "primaire");
+
+                if (headClasses) {
+                    headClasses.forEach((hc: any) => {
+                        if (!results.some((r) => r.class_id === hc.id)) {
+                            results.push({
+                                id: `head-${hc.id}`,
+                                teacher_id: filters.teacher_id!,
+                                subject_id: "primaire-titulaire",
+                                class_id: hc.id,
+                                class_name: hc.name,
+                                subject_name: "Toutes matières (Titulaire)",
+                                created_at: new Date().toISOString(),
+                            });
+                        }
+                    });
+                }
             }
         } catch (e) {
             console.error("Erreur primary_teacher_assignments pour enseignant:", e);
@@ -324,6 +406,24 @@ export async function setPrimaryTeacherAssignment(
         .single();
 
     if (error) throw error;
+
+    // Synchroniser également le nom de l'enseignant sur la table classes (head_teacher_name)
+    try {
+        const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", teacherId)
+            .maybeSingle();
+        if (prof?.full_name) {
+            await supabase
+                .from("classes")
+                .update({ head_teacher_name: prof.full_name })
+                .eq("id", classId);
+        }
+    } catch (syncErr) {
+        console.warn("Erreur synchronisation head_teacher_name:", syncErr);
+    }
+
     return data as unknown as PrimaryTeacherAssignmentRecord;
 }
 
@@ -339,5 +439,14 @@ export async function removePrimaryTeacherAssignment(
         .eq("class_id", classId);
 
     if (error) throw error;
+
+    try {
+        await supabase
+            .from("classes")
+            .update({ head_teacher_name: null })
+            .eq("id", classId);
+    } catch (syncErr) {
+        console.warn("Erreur suppression head_teacher_name:", syncErr);
+    }
 }
 

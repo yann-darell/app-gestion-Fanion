@@ -102,11 +102,29 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
 
   useEffect(() => {
     if (currentAssignment) {
+      if (
+        currentAssignment.subject_id === "primaire-titulaire" ||
+        currentAssignment.subject_id === "primaire"
+      ) {
+        setIsPrimaryClass(true);
+        return;
+      }
+
       const checkPrimary = async () => {
         try {
-          const { data: cls } = await supabase.from("classes").select("division_id").eq("id", currentAssignment.class_id).single();
+          const { data: cls } = await supabase
+            .from("classes")
+            .select("division_id")
+            .eq("id", currentAssignment.class_id)
+            .maybeSingle();
+
           if (cls && cls.division_id) {
-            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).single();
+            const divId = cls.division_id.toLowerCase();
+            if (divId === "primaire" || divId.includes("prim") || divId.includes("mater")) {
+              setIsPrimaryClass(true);
+              return;
+            }
+            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).maybeSingle();
             const divName = (div?.nom || "").toLowerCase();
             setIsPrimaryClass(divName.includes("primaire") || divName.includes("primary") || divName.includes("maternelle"));
           } else {
@@ -114,9 +132,12 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
           }
         } catch (e) {
           console.error(e);
+          setIsPrimaryClass(false);
         }
       };
       checkPrimary();
+    } else {
+      setIsPrimaryClass(false);
     }
   }, [currentAssignment]);
 

@@ -116,16 +116,39 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
   // Détecter si la classe sélectionnée est primaire / maternelle
   useEffect(() => {
     if (currentAssignment) {
+      if (
+        currentAssignment.subject_id === "primaire-titulaire" ||
+        currentAssignment.subject_id === "primaire"
+      ) {
+        setIsPrimaryClass(true);
+        supabase
+          .from("classes")
+          .select("level")
+          .eq("id", currentAssignment.class_id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.level) setClassLevel(data.level);
+          });
+        return;
+      }
+
       const checkPrimary = async () => {
         try {
           const { data: cls } = await supabase
             .from("classes")
             .select("division_id, level")
             .eq("id", currentAssignment.class_id)
-            .single();
+            .maybeSingle();
 
           if (cls && cls.division_id) {
-            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).single();
+            const divId = cls.division_id.toLowerCase();
+            const isPriDirect = divId === "primaire" || divId.includes("prim") || divId.includes("mater");
+            if (isPriDirect) {
+              setIsPrimaryClass(true);
+              setClassLevel(cls.level || "");
+              return;
+            }
+            const { data: div } = await supabase.from("divisions").select("nom").eq("id", cls.division_id).maybeSingle();
             const divName = (div?.nom || "").toLowerCase();
             const isPri = divName.includes("primaire") || divName.includes("primary") || divName.includes("maternelle");
             setIsPrimaryClass(isPri);
@@ -140,6 +163,8 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
         }
       };
       checkPrimary();
+    } else {
+      setIsPrimaryClass(false);
     }
   }, [currentAssignment]);
 
