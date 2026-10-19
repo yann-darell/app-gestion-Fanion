@@ -20,9 +20,9 @@ import {
   SequenceRecord,
   AssignedStudentRecord,
   useSelectionPersistence,
+  listPrimaryApcStructure,
+  listPrimaryMonths,
 } from "@fanion/shared";
-import { listPrimaryApcStructure } from "@fanion/shared/api/grades";
-import { listPrimaryMonths } from "@fanion/shared/api/primaryBulletinPdfService";
 
 interface TeacherEvolutionPageProps {
   userRole?: string;

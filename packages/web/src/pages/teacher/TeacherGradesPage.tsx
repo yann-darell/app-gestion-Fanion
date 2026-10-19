@@ -14,13 +14,11 @@ import {
   SequenceRecord,
   GradeRecord,
   useSelectionPersistence,
-} from "@fanion/shared";
-import {
   getSequenceCompetency,
   upsertSequenceCompetency,
   getGradeSubmission,
   submitClassGrades,
-} from "@fanion/shared/api/grades";
+} from "@fanion/shared";
 import { TeacherPrimaryGradesView } from "./components/TeacherPrimaryGradesView";
 
 interface TeacherGradesPageProps {
@@ -371,7 +369,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white border border-line rounded p-4 shadow-sm">
         <div>
           <label className="block text-xs font-semibold text-slate uppercase mb-1">
-            Classe &amp; Matière assignée
+            {isPrimaryClass ? "Ma Classe" : "Classe & Matière assignée"}
           </label>
           {assignments.length === 0 ? (
             <div className="text-xs text-signal-red italic p-2 border border-dashed border-line rounded">
@@ -385,7 +383,9 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
             >
               {assignments.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.class_name} — {a.subject_name}
+                  {isPrimaryClass
+                    ? a.class_name
+                    : `${a.class_name} — ${a.subject_name}`}
                 </option>
               ))}
             </select>
@@ -413,7 +413,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       </div>
 
       {isPrimaryClass && currentAssignment && (
-        <TeacherPrimaryGradesView currentAssignment={currentAssignment} userRole={userRole} />
+        <TeacherPrimaryGradesView currentAssignment={currentAssignment} />
       )}
 
       {/* Bloc Compétence Évaluée intégrée (1 seul champ par matière/classe/séquence) */}

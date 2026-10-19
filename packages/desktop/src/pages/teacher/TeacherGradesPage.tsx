@@ -14,13 +14,11 @@ import {
   SequenceRecord,
   GradeRecord,
   useSelectionPersistence,
-} from "@fanion/shared";
-import {
   getSequenceCompetency,
   upsertSequenceCompetency,
   getGradeSubmission,
   submitClassGrades,
-} from "@fanion/shared/api/grades";
+} from "@fanion/shared";
 import { TeacherPrimaryGradesView } from "./components/TeacherPrimaryGradesView";
 
 interface TeacherGradesPageProps {

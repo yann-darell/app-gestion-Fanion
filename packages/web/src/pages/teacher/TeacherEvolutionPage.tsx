@@ -20,9 +20,9 @@ import {
   SequenceRecord,
   AssignedStudentRecord,
   useSelectionPersistence,
+  listPrimaryApcStructure,
+  listPrimaryMonths,
 } from "@fanion/shared";
-import { listPrimaryApcStructure } from "@fanion/shared/api/grades";
-import { listPrimaryMonths } from "@fanion/shared/api/primaryBulletinPdfService";
 
 interface TeacherEvolutionPageProps {
   userRole?: string;
@@ -256,19 +256,15 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       }));
       setActivePeriods(periodCols);
 
-      let studentsData: AssignedStudentRecord[];
-      if (userRole === "enseignant") {
-        studentsData = await listMyAssignedStudents(classId, currentAssignment?.subject_id || "");
-      } else {
-        const fullStudents = await listStudents({ classId, status: "active" });
-        studentsData = fullStudents.map((s) => ({
-          id: s.id,
-          matricule: s.matricule || "",
-          first_name: s.first_name,
-          last_name: s.last_name,
-          status: s.status || "active",
-        }));
-      }
+      // Au primaire, la maîtresse gère toute la classe — pas de filtre par attribution matière
+      const fullStudents = await listStudents({ classId, status: "active" });
+      const studentsData: AssignedStudentRecord[] = fullStudents.map((s) => ({
+        id: s.id,
+        matricule: s.matricule || "",
+        first_name: s.first_name,
+        last_name: s.last_name,
+        status: s.status || "active",
+      }));
 
       if (studentsData.length === 0) {
         setEvolutionData([]);
@@ -399,7 +395,7 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
       {/* Sélecteur Classe & Matière */}
       <div className="bg-white border border-line rounded p-4 shadow-sm">
         <label className="block text-xs font-semibold text-slate uppercase mb-1">
-          Sélectionner Classe &amp; Matière
+          {isPrimaryClass ? "Ma Classe" : "Sélectionner Classe & Matière"}
         </label>
         {assignments.length === 0 ? (
           <div className="text-xs text-signal-red italic p-2 border border-dashed border-line rounded">
@@ -413,7 +409,7 @@ export const TeacherEvolutionPage: React.FC<TeacherEvolutionPageProps> = ({ user
           >
             {assignments.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.class_name} — {a.subject_name}
+                {isPrimaryClass ? a.class_name : `${a.class_name} — ${a.subject_name}`}
               </option>
             ))}
           </select>

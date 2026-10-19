@@ -103,19 +103,55 @@ export interface TeacherAssignmentRecord {
 export async function listTeacherAssignments(filters?: {
     teacher_id?: string;
 }): Promise<TeacherAssignmentRecord[]> {
+    const results: TeacherAssignmentRecord[] = [];
+
     // Enseignant → RPC SECURITY DEFINER (contourne la RLS de teacher_assignments)
     if (filters?.teacher_id) {
-        const { data, error } = await supabase.rpc("get_my_teacher_assignments");
-        if (error) throw error;
-        return (data || []).map((row: any) => ({
-            id: row.id,
-            teacher_id: row.teacher_id,
-            subject_id: row.subject_id,
-            class_id: row.class_id,
-            class_name: row.class_name || "Classe inconnue",
-            subject_name: row.subject_name || "Matière inconnue",
-            created_at: row.created_at,
-        }));
+        try {
+            const { data, error } = await supabase.rpc("get_my_teacher_assignments");
+            if (!error && data) {
+                results.push(...data.map((row: any) => ({
+                    id: row.id,
+                    teacher_id: row.teacher_id,
+                    subject_id: row.subject_id,
+                    class_id: row.class_id,
+                    class_name: row.class_name || "Classe inconnue",
+                    subject_name: row.subject_name || "Matière inconnue",
+                    created_at: row.created_at,
+                })));
+            }
+        } catch (e) {
+            console.error("Erreur get_my_teacher_assignments:", e);
+        }
+
+        // Récupérer également les attributions primaires de l'enseignant
+        try {
+            const { data: ptaData, error: ptaErr } = await supabase
+                .from("primary_teacher_assignments")
+                .select(`
+                    id, teacher_id, class_id, created_at,
+                    classes:class_id (name)
+                `)
+                .eq("teacher_id", filters.teacher_id);
+
+            if (!ptaErr && ptaData) {
+                ptaData.forEach((row: any) => {
+                    results.push({
+                        id: row.id,
+                        teacher_id: row.teacher_id,
+                        subject_id: "primaire-titulaire",
+                        class_id: row.class_id,
+                        class_name: row.classes?.name || "Classe Primaire",
+                        subject_name: "Toutes matières (Titulaire)",
+                        created_at: row.created_at,
+                    });
+                });
+            }
+        } catch (e) {
+            console.error("Erreur primary_teacher_assignments pour enseignant:", e);
+        }
+
+        return results;
     }
 
     // Direction → SELECT direct (RLS autorise via ta_admin_all)
@@ -130,7 +166,7 @@ export async function listTeacherAssignments(filters?: {
     const { data, error } = await query;
     if (error) throw error;
 
-    return (data || []).map((row: any) => ({
+    const collegeList = (data || []).map((row: any) => ({
         id: row.id,
         teacher_id: row.teacher_id,
         subject_id: row.subject_id,
@@ -139,6 +175,30 @@ export async function listTeacherAssignments(filters?: {
         subject_name: row.subjects?.name || "Matière inconnue",
         created_at: row.created_at,
     }));
+
+    // Ajouter les attributions primaires pour la direction
+    const { data: ptaAll, error: ptaAllErr } = await supabase
+        .from("primary_teacher_assignments")
+        .select(`
+            id, teacher_id, class_id, created_at,
+            classes:class_id (name)
+        `);
+
+    if (!ptaAllErr && ptaAll) {
+        ptaAll.forEach((row: any) => {
+            collegeList.push({
+                id: row.id,
+                teacher_id: row.teacher_id,
+                subject_id: "primaire-titulaire",
+                class_id: row.class_id,
+                class_name: row.classes?.name || "Classe Primaire",
+                subject_name: "Toutes matières (Titulaire)",
+                created_at: row.created_at,
+            });
+        });
+    }
+
+    return collegeList;
 }
 
 /**
@@ -164,10 +224,120 @@ export async function listMyAssignedStudents(
     classId: string,
     subjectId: string,
 ): Promise<AssignedStudentRecord[]> {
-    const { data, error } = await supabase.rpc("get_my_assigned_students", {
-        p_class_id: classId,
-        p_subject_id: subjectId,
-    });
+    // Si attribution titulaire primaire
+    if (subjectId === "primaire-titulaire" || !subjectId) {
+        const { data, error } = await supabase
+            .from("students")
+            .select("id, matricule, first_name, last_name, status")
+            .eq("class_id", classId)
+            .eq("status", "active")
+            .order("last_name")
+            .order("first_name");
+        if (error) throw error;
+        return (data || []) as AssignedStudentRecord[];
+    }
+
+    try {
+        const { data, error } = await supabase.rpc("get_my_assigned_students", {
+            p_class_id: classId,
+            p_subject_id: subjectId,
+        });
+        if (error) throw error;
+        if (data && data.length > 0) return data as AssignedStudentRecord[];
+    } catch (e) {
+        console.warn("RPC get_my_assigned_students fallback:", e);
+    }
+
+    // Fallback : si c'est une classe primaire
+    const { data: stds, error: stdsErr } = await supabase
+        .from("students")
+        .select("id, matricule, first_name, last_name, status")
+        .eq("class_id", classId)
+        .eq("status", "active")
+        .order("last_name")
+        .order("first_name");
+
+    if (!stdsErr && stds) {
+        return stds as AssignedStudentRecord[];
+    }
+
+    return [];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Attributions Enseignants PRIMAIRE (Titulaire de classe)
+// ─────────────────────────────────────────────────────────────
+
+export interface PrimaryTeacherAssignmentRecord {
+    id: string;
+    teacher_id: string;
+    class_id: string;
+    created_at: string;
+    profiles?: { id: string; full_name: string; role: string };
+    classes?: { id: string; name: string; level: string };
+}
+
+/**
+ * Récupère l'attribution de l'enseignant titulaire d'une classe primaire.
+ */
+export async function getPrimaryTeacherAssignment(
+    classId: string
+): Promise<PrimaryTeacherAssignmentRecord | null> {
+    const { data, error } = await supabase
+        .from("primary_teacher_assignments")
+        .select(`
+            id, teacher_id, class_id, created_at,
+            profiles:teacher_id (id, full_name, role),
+            classes:class_id (id, name, level)
+        `)
+        .eq("class_id", classId)
+        .maybeSingle();
+
     if (error) throw error;
-    return (data || []) as AssignedStudentRecord[];
-}
+    return (data as unknown as PrimaryTeacherAssignmentRecord) ?? null;
+}
+
+/**
+ * Définit ou modifie l'enseignant titulaire d'une classe primaire.
+ */
+export async function setPrimaryTeacherAssignment(
+    classId: string,
+    teacherId: string
+): Promise<PrimaryTeacherAssignmentRecord> {
+    // Si une attribution existe déjà pour cette classe, on la supprime ou la remplace
+    await supabase
+        .from("primary_teacher_assignments")
+        .delete()
+        .eq("class_id", classId);
+
+    const { data, error } = await supabase
+        .from("primary_teacher_assignments")
+        .insert({
+            class_id: classId,
+            teacher_id: teacherId,
+        })
+        .select(`
+            id, teacher_id, class_id, created_at,
+            profiles:teacher_id (id, full_name, role),
+            classes:class_id (id, name, level)
+        `)
+        .single();
+
+    if (error) throw error;
+    return data as unknown as PrimaryTeacherAssignmentRecord;
+}
+
+/**
+ * Supprime l'attribution titulaire d'une classe primaire.
+ */
+export async function removePrimaryTeacherAssignment(
+    classId: string
+): Promise<void> {
+    const { error } = await supabase
+        .from("primary_teacher_assignments")
+        .delete()
+        .eq("class_id", classId);
+
+    if (error) throw error;
+}
+

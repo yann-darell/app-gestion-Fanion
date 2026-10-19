@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { CheckIcon } from "../../../components/ui/Icons";
-import { supabase, listStudents, listMyAssignedStudents, AssignedStudentRecord } from "@fanion/shared";
 import {
+  supabase,
+  listStudents,
+  AssignedStudentRecord,
   listPrimaryApcStructure,
   getOrCreatePrimaryEvaluationForMonth,
   listPrimaryGrades,
   upsertPrimaryGrade,
-} from "@fanion/shared/api/grades";
-import { listPrimaryMonths } from "@fanion/shared/api/primaryBulletinPdfService";
+  listPrimaryMonths,
+} from "@fanion/shared";
 
 interface TeacherPrimaryGradesViewProps {
   currentAssignment: any;
-  userRole?: string;
 }
 
-export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> = ({ currentAssignment, userRole }) => {
+export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> = ({ currentAssignment }) => {
   const [primaryMonths, setPrimaryMonths] = useState<any[]>([]);
   const [selectedMonthId, setSelectedMonthId] = useState<string>("");
   
@@ -80,13 +81,16 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
       const evalId = await getOrCreatePrimaryEvaluationForMonth(monthId);
       setPrimaryEvalId(evalId);
 
-      let studentsData: AssignedStudentRecord[];
-      if (userRole === "enseignant") {
-        studentsData = await listMyAssignedStudents(classId, currentAssignment.subject_id);
-      } else {
-        const fullStudents = await listStudents({ classId, status: "active" });
-        studentsData = fullStudents.map(s => ({ id: s.id, matricule: s.matricule || "", first_name: s.first_name, last_name: s.last_name, status: s.status || "active" }));
-      }
+      // Au primaire, la maîtresse gère toute la classe — on charge tous les élèves actifs
+      // sans filtrer par attribution matière (pas de logique collège ici)
+      const fullStudents = await listStudents({ classId, status: "active" });
+      const studentsData: AssignedStudentRecord[] = fullStudents.map(s => ({
+        id: s.id,
+        matricule: s.matricule || "",
+        first_name: s.first_name,
+        last_name: s.last_name,
+        status: s.status || "active",
+      }));
       setStudents(studentsData);
 
       const gradesData = await listPrimaryGrades(evalId, studentsData.map(s => s.id));
@@ -165,7 +169,7 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
         <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        <span>Classe Primaire — Remplissage automatique (Sauvegarde à chaque champ)</span>
+        <span>Classe Primaire — Grille APC complète (toutes matières · sauvegarde automatique par champ)</span>
       </div>
 
       {primaryDomains.length === 0 ? (

@@ -97,6 +97,22 @@ export const ClassModal: React.FC<ClassModalProps> = ({
             school_year_id: editingClass.school_year_id,
             head_teacher_name: editingClass.head_teacher_name || "",
           });
+
+          // Si primaire, vérifier si une attribution titulaire existe pour pré-remplir
+          if (editingClass.division_id === "primaire") {
+            try {
+              const { data: pta } = await supabase
+                .from("primary_teacher_assignments")
+                .select("teacher_id, profiles:teacher_id(full_name)")
+                .eq("class_id", editingClass.id)
+                .maybeSingle();
+              if (pta && (pta as any).profiles?.full_name) {
+                setValue("head_teacher_name", (pta as any).profiles.full_name);
+              }
+            } catch (e) {
+              console.warn("Erreur chargement titulaire primaire:", e);
+            }
+          }
         } else {
           reset({
             name: "",
@@ -128,6 +144,8 @@ export const ClassModal: React.FC<ClassModalProps> = ({
   /* ── Submit ── */
   const handleFormSubmit = async (data: ClassFormData) => {
     try {
+      let savedClassId = editingClass?.id;
+
       if (editingClass) {
         const { error } = await supabase
           .from("classes")
@@ -141,15 +159,46 @@ export const ClassModal: React.FC<ClassModalProps> = ({
           .eq("id", editingClass.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("classes").insert({
+        const { data: inserted, error } = await supabase.from("classes").insert({
           name: data.name,
           level: data.level,
           division_id: data.division_id,
           school_year_id: data.school_year_id,
           head_teacher_name: data.head_teacher_name || null,
-        });
+        }).select("id").single();
         if (error) throw error;
+        savedClassId = inserted.id;
       }
+
+      // Synchronisation automatique pour le primaire : lier l'enseignant titulaire dans primary_teacher_assignments
+      if (savedClassId && data.division_id === "primaire") {
+        try {
+          if (data.head_teacher_name) {
+            const matchedTeacher = teachers.find((t) => t.full_name === data.head_teacher_name);
+            if (matchedTeacher) {
+              await supabase
+                .from("primary_teacher_assignments")
+                .delete()
+                .eq("class_id", savedClassId);
+
+              await supabase
+                .from("primary_teacher_assignments")
+                .insert({
+                  class_id: savedClassId,
+                  teacher_id: matchedTeacher.id,
+                });
+            }
+          } else {
+            await supabase
+              .from("primary_teacher_assignments")
+              .delete()
+              .eq("class_id", savedClassId);
+          }
+        } catch (ptaSyncErr) {
+          console.warn("Erreur synchronisation titulaire primaire:", ptaSyncErr);
+        }
+      }
+
       onSave();
       onClose();
     } catch (err: any) {

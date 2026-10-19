@@ -6,9 +6,13 @@ import {
   listTeachers,
   createAssignment,
   deleteAssignment,
+  getPrimaryTeacherAssignment,
+  setPrimaryTeacherAssignment,
+  removePrimaryTeacherAssignment,
   ClassRecord,
   CoefficientRecord,
   AssignmentRecord,
+  PrimaryTeacherAssignmentRecord,
 } from "@fanion/shared";
 
 interface TeacherAssignmentsPageProps {
@@ -30,6 +34,11 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [coefficients, setCoefficients] = useState<CoefficientRecord[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRecord[]>([]);
+
+  // État spécifique primaire : titulaire de la classe
+  const [primaryAssignment, setPrimaryAssignment] = useState<PrimaryTeacherAssignmentRecord | null>(null);
+  const [savingPrimary, setSavingPrimary] = useState(false);
+  const [primarySuccessMsg, setPrimarySuccessMsg] = useState<string | null>(null);
 
   const [loadingInit, setLoadingInit] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -53,6 +62,8 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         setSelectedClassId("");
         setCoefficients([]);
         setAssignments([]);
+        setPrimaryAssignment(null);
+        setPrimarySuccessMsg(null);
       } catch (err: any) {
         console.error("Erreur initialisation web attributions:", err);
         setError("Impossible de charger les classes et enseignants.");
@@ -67,26 +78,58 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     if (!classId) return;
     setLoadingData(true);
     setError(null);
+    setPrimarySuccessMsg(null);
+
     try {
-      const [coefData, assignData] = await Promise.all([
-        listCoefficients(classId),
-        listAssignments({ classId }),
-      ]);
-      setCoefficients(coefData);
-      setAssignments(assignData);
+      if (selectedDivision === "primaire") {
+        const pta = await getPrimaryTeacherAssignment(classId);
+        setPrimaryAssignment(pta);
+      } else {
+        const [coefData, assignData] = await Promise.all([
+          listCoefficients(classId),
+          listAssignments({ classId }),
+        ]);
+        setCoefficients(coefData);
+        setAssignments(assignData);
+      }
     } catch (err: any) {
       console.error("Erreur chargement attributions web:", err);
       setError("Erreur lors du chargement des matières et attributions.");
     } finally {
       setLoadingData(false);
     }
-  }, []);
+  }, [selectedDivision]);
 
   useEffect(() => {
     if (selectedClassId) {
       fetchClassAssignments(selectedClassId);
     }
   }, [selectedClassId, fetchClassAssignments]);
+
+  // Handler pour l'enseignant titulaire du primaire
+  const handlePrimaryTeacherChange = async (newTeacherId: string) => {
+    if (!selectedClassId) return;
+    setSavingPrimary(true);
+    setError(null);
+    setPrimarySuccessMsg(null);
+
+    try {
+      if (newTeacherId === "") {
+        await removePrimaryTeacherAssignment(selectedClassId);
+        setPrimaryAssignment(null);
+        setPrimarySuccessMsg("Attribution de la classe retirée.");
+      } else {
+        const updated = await setPrimaryTeacherAssignment(selectedClassId, newTeacherId);
+        setPrimaryAssignment(updated);
+        setPrimarySuccessMsg("Enseignant titulaire attribué avec succès à la classe !");
+      }
+    } catch (err: any) {
+      console.error("Erreur affectation titulaire primaire:", err);
+      setError(err?.message || "Impossible de mettre à jour le titulaire de la classe.");
+    } finally {
+      setSavingPrimary(false);
+    }
+  };
 
   const handleTeacherChange = async (subjectId: string, newTeacherId: string) => {
     if (!selectedClassId) return;
@@ -131,6 +174,8 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     }
   };
 
+  const selectedClass = classes.find((c) => c.id === selectedClassId);
+
   if (!isAuthorized) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -152,7 +197,9 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
           Attribution des Enseignants
         </h1>
         <p className="text-xs md:text-sm text-slate mt-1">
-          Affectez les enseignants aux matières pour la classe sélectionnée.
+          {selectedDivision === "primaire"
+            ? "Affectez l'enseignant titulaire en charge de la classe du primaire."
+            : "Affectez les enseignants aux matières pour la classe sélectionnée."}
         </p>
       </div>
 
@@ -210,6 +257,12 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         </div>
       )}
 
+      {primarySuccessMsg && (
+        <div className="mb-4 p-3 bg-fanion-green/10 border border-fanion-green/20 rounded text-sm text-fanion-green font-medium">
+          {primarySuccessMsg}
+        </div>
+      )}
+
       {/* Content */}
       {!selectedClassId ? (
         <div className="py-12 border border-dashed border-line rounded bg-white text-center">
@@ -220,6 +273,66 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
       ) : loadingData ? (
         <div className="py-12 text-center text-sm font-medium text-slate">
           Chargement des attributions...
+        </div>
+      ) : selectedDivision === "primaire" ? (
+        /* VUE PRIMAIRE : MODÈLE TITULAIRE DE CLASSE */
+        <div className="bg-white border border-line rounded p-6 shadow-sm flex flex-col gap-6">
+          <div className="border-b border-line pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded text-xs font-bold font-mono bg-ink text-white">
+                  Primaire
+                </span>
+                <h2 className="text-base font-bold text-ink">
+                  {selectedClass?.name} ({selectedClass?.level})
+                </h2>
+              </div>
+              <p className="text-xs text-slate mt-1">
+                Au primaire (système APC), un seul enseignant titulaire a la charge de la classe et saisit toutes les évaluations/compétences.
+              </p>
+            </div>
+            <div>
+              {primaryAssignment?.teacher_id ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Classe attribuée
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                  En attente de titulaire
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="max-w-xl flex flex-col gap-3">
+            <label className="block text-xs font-semibold text-slate uppercase">
+              Enseignant titulaire de la classe
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <select
+                value={primaryAssignment?.teacher_id || ""}
+                onChange={(e) => handlePrimaryTeacherChange(e.target.value)}
+                disabled={savingPrimary}
+                className="flex-1 px-3 py-2 border border-line rounded text-sm bg-white focus:outline-none focus:border-ink h-11 font-medium shadow-sm"
+              >
+                <option value="">— Aucun titulaire assigné —</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name}
+                  </option>
+                ))}
+              </select>
+              {savingPrimary && (
+                <span className="text-xs text-slate italic flex items-center gap-1">
+                  Enregistrement...
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate leading-relaxed">
+              Dès que l'enseignant titulaire est sélectionné, il accède immédiatement à sa classe dans son espace de saisie des évaluations et notes APC.
+            </p>
+          </div>
         </div>
       ) : coefficients.length === 0 ? (
         <div className="py-12 px-6 border border-line rounded bg-white text-center flex flex-col items-center">

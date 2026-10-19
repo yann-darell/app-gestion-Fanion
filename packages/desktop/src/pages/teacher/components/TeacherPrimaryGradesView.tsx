@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { CheckIcon } from "../../../components/ui/Icons";
-import { supabase, listStudents, listMyAssignedStudents, AssignedStudentRecord } from "@fanion/shared";
 import {
+  supabase,
+  listStudents,
+  listMyAssignedStudents,
+  AssignedStudentRecord,
   listPrimaryApcStructure,
   getOrCreatePrimaryEvaluationForMonth,
   listPrimaryGrades,
   upsertPrimaryGrade,
-} from "@fanion/shared/api/grades";
-import { listPrimaryMonths } from "@fanion/shared/api/primaryBulletinPdfService";
+  listPrimaryMonths,
+} from "@fanion/shared";
 
 interface TeacherPrimaryGradesViewProps {
   currentAssignment: any;

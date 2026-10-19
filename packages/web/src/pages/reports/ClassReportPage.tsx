@@ -9,11 +9,9 @@ import {
   useSelectionPersistence,
   generateClassReportPdf,
   listPrimaryMonths,
-} from "@fanion/shared";
-import {
   generateClassReport,
   ClassReportData,
-} from "@fanion/shared/services/classReportService";
+} from "@fanion/shared";
 import {
   BarChart,
   Bar,

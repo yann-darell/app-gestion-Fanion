@@ -75,6 +75,14 @@ export async function savePrimaryScalesForClass(
     subMap[`${s.domain_id}_${s.label}`] = s.id;
   });
 
+  // 2. Préparer les données à insérer ou mettre à jour pour cette classe
+  const recordsToUpsert: {
+    class_id: string;
+    level: string;
+    sub_evaluation_id: string;
+    max_score: number;
+  }[] = [];
+
   for (const comp of competences) {
     const rawCode = comp.code.replace("COMPÉTENCES ", "");
     const domainId = domainMap[rawCode];
@@ -82,19 +90,56 @@ export async function savePrimaryScalesForClass(
     for (const crit of comp.criteria) {
       const subId = domainId ? subMap[`${domainId}_${crit.label}`] : null;
       if (subId) {
-        // Enregistrer par class_id et level
-        await supabase
-          .from("primary_scales")
-          .upsert(
-            {
-              class_id: classId,
-              level: classLevel,
-              sub_evaluation_id: subId,
-              max_score: crit.defaultMax,
-            },
-            { onConflict: "sub_evaluation_id,class_id,level" }
-          );
+        recordsToUpsert.push({
+          class_id: classId,
+          level: classLevel,
+          sub_evaluation_id: subId,
+          max_score: crit.defaultMax,
+        });
       }
     }
+  }
+
+  if (recordsToUpsert.length === 0) return;
+
+  // Récupérer les ids des enregistrements existants pour cette classe
+  const { data: existingRecords, error: fetchErr } = await supabase
+    .from("primary_scales")
+    .select("id, sub_evaluation_id")
+    .eq("class_id", classId);
+
+  if (fetchErr) {
+    console.error("Erreur lecture primary_scales existantes:", fetchErr);
+  }
+
+  const existingMap = new Map<string, string>();
+  (existingRecords || []).forEach((r: any) => {
+    existingMap.set(r.sub_evaluation_id, r.id);
+  });
+
+  const updates: any[] = [];
+  const inserts: any[] = [];
+
+  for (const rec of recordsToUpsert) {
+    const existingId = existingMap.get(rec.sub_evaluation_id);
+    if (existingId) {
+      updates.push({ ...rec, id: existingId });
+    } else {
+      inserts.push(rec);
+    }
+  }
+
+  if (updates.length > 0) {
+    const { error: upErr } = await supabase
+      .from("primary_scales")
+      .upsert(updates);
+    if (upErr) throw upErr;
+  }
+
+  if (inserts.length > 0) {
+    const { error: insErr } = await supabase
+      .from("primary_scales")
+      .insert(inserts);
+    if (insErr) throw insErr;
   }
 }
