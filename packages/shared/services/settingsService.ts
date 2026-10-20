@@ -9,6 +9,9 @@ export interface SchoolSettings {
   phone: string;
   legal_notice: string;
   director_name: string;
+  primary_name?: string | null;
+  primary_director_name?: string | null;
+  primary_legal_notice?: string | null;
   logo_url?: string | null;
   watermark_url?: string | null;
   created_at?: string;
@@ -60,12 +63,15 @@ export async function getSchoolSettings(): Promise<SchoolSettings> {
 
   if (!data) {
     return {
-      name: "Établissement Scolaire Le Fanion",
+      name: "Collège Bilingue Le Fanion",
       address: "Yaoundé, Cameroun",
       city: "Yaoundé",
       phone: "+237 600 00 00 00",
       legal_notice: "Établissement d'Enseignement Général et Bilingue",
-      director_name: "La Directrice",
+      director_name: "Le Principal",
+      primary_name: "École Primaire Le Fanion",
+      primary_director_name: "La Directrice",
+      primary_legal_notice: "Enseignement Primaire et Maternel - Système APC",
     };
   }
 
@@ -73,30 +79,45 @@ export async function getSchoolSettings(): Promise<SchoolSettings> {
 }
 
 /**
- * Met à jour les paramètres de l'établissement
+ * Met à jour les paramètres de l'établissement avec fallback résilient
+ * si les nouvelles colonnes primary_* n'ont pas encore été migrées en base.
  */
 export async function updateSchoolSettings(settings: Partial<SchoolSettings>): Promise<SchoolSettings> {
   const current = await getSchoolSettings();
 
-  if (current.id) {
-    const { data, error } = await supabase
-      .from("school_settings")
-      .update(settings)
-      .eq("id", current.id)
-      .select()
-      .single();
+  const performSave = async (payload: Partial<SchoolSettings>) => {
+    if (current.id) {
+      const { data, error } = await supabase
+        .from("school_settings")
+        .update(payload)
+        .eq("id", current.id)
+        .select()
+        .single();
 
-    if (error) throw new Error(`Erreur mise à jour paramètres: ${error.message}`);
-    return data as SchoolSettings;
-  } else {
-    const { data, error } = await supabase
-      .from("school_settings")
-      .insert([settings])
-      .select()
-      .single();
+      if (error) throw error;
+      return data as SchoolSettings;
+    } else {
+      const { data, error } = await supabase
+        .from("school_settings")
+        .insert([payload])
+        .select()
+        .single();
 
-    if (error) throw new Error(`Erreur création paramètres: ${error.message}`);
-    return data as SchoolSettings;
+      if (error) throw error;
+      return data as SchoolSettings;
+    }
+  };
+
+  try {
+    return await performSave(settings);
+  } catch (err: any) {
+    // Si la colonne primary_* n'existe pas encore en DB (code 42703 PostgreSQL)
+    if (err?.code === "42703" || err?.message?.includes("primary_")) {
+      console.warn("Colonnes primary_* non encore présentes en base de données. Sauvegarde des paramètres de base.");
+      const { primary_name, primary_director_name, primary_legal_notice, ...baseSettings } = settings;
+      return await performSave(baseSettings);
+    }
+    throw new Error(`Erreur mise à jour paramètres: ${err.message}`);
   }
 }
 
