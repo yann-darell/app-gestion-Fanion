@@ -12,6 +12,42 @@ import {
 } from "@fanion/shared";
 import { DeactivateUserModal } from "../settings/components/DeactivateUserModal";
 
+const CREDENTIALS_STORAGE_KEY = "fanion_saved_teacher_credentials";
+
+interface StoredTeacherCredential {
+  fullName: string;
+  email: string;
+  password?: string;
+  updatedAt: string;
+}
+
+function getStoredTeacherCredentials(): Record<string, StoredTeacherCredential> {
+  try {
+    const raw = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTeacherCredential(userId: string, data: { fullName: string; email: string; password?: string }) {
+  try {
+    const creds = getStoredTeacherCredentials();
+    creds[userId] = {
+      fullName: data.fullName,
+      email: data.email,
+      password: data.password || creds[userId]?.password,
+      updatedAt: new Date().toISOString(),
+    };
+    if (data.email) {
+      creds[data.email.toLowerCase()] = creds[userId];
+    }
+    localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(creds));
+  } catch (e) {
+    console.warn("Erreur stockage identifiants:", e);
+  }
+}
+
 function generateFictitiousEmail(fullName: string): string {
   return (
     fullName
@@ -52,6 +88,12 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
     email: string;
     password: string;
   } | null>(null);
+
+  // État modal consultation / recopie de la fiche identifiants enseignant
+  const [credentialsTarget, setCredentialsTarget] = useState<UserProfile | null>(null);
+  const [credentialsPassword, setCredentialsPassword] = useState<string | null>(null);
+  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [credentialsNotice, setCredentialsNotice] = useState<string | null>(null);
 
   // État reset mot de passe fictif
   const [resetTarget, setResetTarget] = useState<UserProfile | null>(null);
@@ -157,6 +199,12 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
       if (isFictitiousMode) {
         const emailToUse = fictitiousEmail || generateFictitiousEmail(fullName);
         const response = await createFictitiousTeacher(emailToUse, fullName);
+        // Sauvegarder dans le cache local pour consultation/recopie future
+        saveTeacherCredential(response.user.id, {
+          fullName: response.user.full_name,
+          email: response.user.email,
+          password: response.generated_password,
+        });
         // Afficher la modal avec les identifiants générés
         setFictitiousCredentials({
           fullName: response.user.full_name,
@@ -184,6 +232,56 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
     }
   };
 
+  const openCredentialsModal = (user: UserProfile) => {
+    setCredentialsTarget(user);
+    setShowPasswordText(false);
+    setCredentialsNotice(null);
+    setResetError(null);
+    const stored = getStoredTeacherCredentials()[user.id] || getStoredTeacherCredentials()[(user.email || "").toLowerCase()];
+    setCredentialsPassword(stored?.password || null);
+  };
+
+  const handleGenerateOrResetPasswordForModal = async (user: UserProfile) => {
+    try {
+      setResetting(true);
+      setResetError(null);
+      const result = await resetFictitiousPassword(user.id);
+      setCredentialsPassword(result.generated_password);
+      setShowPasswordText(true);
+      saveTeacherCredential(user.id, {
+        fullName: user.full_name,
+        email: user.email || "",
+        password: result.generated_password,
+      });
+      setCredentialsNotice("Nouveau mot de passe généré et mémorisé avec succès !");
+      setTimeout(() => setCredentialsNotice(null), 3500);
+    } catch (err: any) {
+      setResetError(err?.message || "Échec de la génération du mot de passe.");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCredentialsNotice(`${label} copié dans le presse-papiers !`);
+    setTimeout(() => setCredentialsNotice(null), 3000);
+  };
+
+  const getFullShareText = (user: UserProfile, pwd?: string | null) => {
+    return [
+      `*Le Fanion - Accès Enseignant*`,
+      `Bonjour ${user.full_name},`,
+      `Voici vos identifiants pour vous connecter à l'application scolaire Le Fanion :`,
+      ``,
+      `🌐 Lien de connexion : https://app-gestion-fanion.vercel.app`,
+      `📧 Identifiant : ${user.email || "Non renseigné"}`,
+      pwd ? `🔑 Mot de passe : ${pwd}` : `🔑 Mot de passe : (votre mot de passe configuré)`,
+      ``,
+      `Une fois connecté, vous pourrez saisir vos évaluations et notes.`,
+    ].join("\n");
+  };
+
   const handleResetPassword = async () => {
     if (!resetTarget) return;
     try {
@@ -191,6 +289,11 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
       setResetError(null);
       const result = await resetFictitiousPassword(resetTarget.id);
       setResetResult(result.generated_password);
+      saveTeacherCredential(resetTarget.id, {
+        fullName: resetTarget.full_name,
+        email: resetTarget.email || "",
+        password: result.generated_password,
+      });
     } catch (err: any) {
       setResetError(err?.message || "Échec de la réinitialisation.");
     } finally {
@@ -657,18 +760,16 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                   </td>
                                   <td className="px-4 py-3 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                      {u.is_fictitious && (
-                                        <button
-                                          onClick={() => { setResetTarget(u); setResetResult(null); setResetError(null); }}
-                                          className="px-2 py-1 text-xs font-medium bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded text-amber-700 transition flex items-center gap-1"
-                                          title="Réinitialiser le mot de passe"
-                                        >
-                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                                          </svg>
-                                          <span>Mdp</span>
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => openCredentialsModal(u)}
+                                        className="px-2.5 py-1 text-xs font-semibold bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded text-amber-800 transition flex items-center gap-1 shadow-sm"
+                                        title="Voir et copier les identifiants de connexion"
+                                      >
+                                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                        </svg>
+                                        <span>Identifiants</span>
+                                      </button>
                                       <button
                                         onClick={() => handleToggleClick(u)}
                                         disabled={submittingToggleId === u.id}
@@ -744,14 +845,16 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
                                 </span>
                               </div>
                               <div className="flex items-center justify-end gap-2 pt-1 border-t border-line/40">
-                                {u.is_fictitious && (
-                                  <button
-                                    onClick={() => { setResetTarget(u); setResetResult(null); setResetError(null); }}
-                                    className="px-2.5 py-1 text-xs font-medium bg-amber-50 border border-amber-200 rounded text-amber-700"
-                                  >
-                                    Mdp
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => openCredentialsModal(u)}
+                                  className="px-2.5 py-1 text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 rounded flex items-center gap-1 shadow-sm"
+                                  title="Voir et copier les identifiants de connexion"
+                                >
+                                  <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                  </svg>
+                                  <span>Identifiants</span>
+                                </button>
                                 <button
                                   onClick={() => handleToggleClick(u)}
                                   disabled={submittingToggleId === u.id}
@@ -808,7 +911,7 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
               <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
-              <span>Ces identifiants ne seront <strong>plus affichés</strong> après fermeture de cette fenêtre.</span>
+              <span>Ces identifiants sont sauvegardés. Vous pourrez les revoir et les recopier à tout moment depuis le bouton <strong>« Identifiants »</strong> dans la liste des comptes.</span>
             </div>
 
             <div className="space-y-3">
@@ -854,6 +957,187 @@ export const UserAccountsPage: React.FC<UserAccountsPageProps> = ({ userRole }) 
               >
                 J'ai noté — Fermer
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL FICHE D'IDENTIFIANTS ENSEIGNANT (CONSULTATION, RÉGÉNÉRATION & ENVOI) */}
+      {credentialsTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <div className="bg-white rounded-lg border border-line max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-ink">Fiche de connexion enseignant</h3>
+                  <p className="text-[11px] text-slate">Consultez, recopiez ou transmettez ces identifiants à l'enseignant.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCredentialsTarget(null)}
+                className="text-slate hover:text-ink transition"
+              >
+                <CloseIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {credentialsNotice && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 font-semibold flex items-center justify-between">
+                <span>{credentialsNotice}</span>
+                <button onClick={() => setCredentialsNotice(null)} className="text-emerald-700 hover:text-emerald-900 ml-2 font-bold">✕</button>
+              </div>
+            )}
+
+            {resetError && (
+              <div className="p-3 bg-signal-red/10 border border-signal-red/20 rounded text-xs text-signal-red font-medium">
+                {resetError}
+              </div>
+            )}
+
+            <div className="p-3 bg-paper-dark rounded border border-line space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-ink">{credentialsTarget.full_name}</span>
+                {getRoleBadge(credentialsTarget.role)}
+              </div>
+              <p className="text-xs text-slate">
+                Statut : <strong className={credentialsTarget.is_active !== false ? "text-emerald-700" : "text-rose-700"}>
+                  {credentialsTarget.is_active !== false ? "Compte Actif" : "Compte Inactif"}
+                </strong>
+                {credentialsTarget.is_fictitious && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 font-semibold">Compte Local / Fictif</span>}
+              </p>
+            </div>
+
+            {/* Identifiants détaillés */}
+            <div className="space-y-3">
+              {/* Email / Identifiant */}
+              <div className="flex items-center justify-between gap-2 p-2.5 bg-paper rounded border border-line">
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate uppercase font-semibold mb-0.5">📧 Identifiant / Email</p>
+                  <p className="text-xs font-mono text-ink font-semibold truncate">
+                    {credentialsTarget.email || "— Aucun email —"}
+                  </p>
+                </div>
+                {credentialsTarget.email && (
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(credentialsTarget.email!, "Identifiant")}
+                    className="flex-shrink-0 px-2.5 py-1 text-xs font-semibold bg-white border border-line rounded hover:bg-paper transition text-slate"
+                  >
+                    Copier
+                  </button>
+                )}
+              </div>
+
+              {/* Mot de passe */}
+              <div className="flex items-center justify-between gap-2 p-2.5 bg-paper rounded border border-line">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-slate uppercase font-semibold mb-0.5">🔑 Mot de passe de connexion</p>
+                  {credentialsPassword ? (
+                    <p className="text-xs font-mono text-ink font-bold truncate">
+                      {showPasswordText ? credentialsPassword : "••••••••••••••••"}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate italic">
+                      Mot de passe non mémorisé sur cet appareil (sécurité)
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {credentialsPassword && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordText(!showPasswordText)}
+                        className="px-2 py-1 text-[11px] font-medium bg-white border border-line rounded hover:bg-paper transition text-slate"
+                      >
+                        {showPasswordText ? "Masquer" : "Afficher"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(credentialsPassword, "Mot de passe")}
+                        className="px-2 py-1 text-[11px] font-semibold bg-white border border-line rounded hover:bg-paper transition text-slate"
+                      >
+                        Copier
+                      </button>
+                    </>
+                  )}
+                  {credentialsTarget.is_fictitious && (
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateOrResetPasswordForModal(credentialsTarget)}
+                      disabled={resetting}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 rounded transition"
+                      title="Générer un nouveau mot de passe"
+                    >
+                      {resetting ? "Génération..." : credentialsPassword ? "Nouveau mdp" : "Générer un mdp"}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Lien de l'application */}
+              <div className="flex items-center justify-between gap-2 p-2.5 bg-paper rounded border border-line">
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate uppercase font-semibold mb-0.5">🔗 Lien de l'application</p>
+                  <p className="text-xs font-mono text-ink font-semibold truncate">
+                    https://app-gestion-fanion.vercel.app
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard("https://app-gestion-fanion.vercel.app", "Lien")}
+                  className="flex-shrink-0 px-2.5 py-1 text-xs font-semibold bg-white border border-line rounded hover:bg-paper transition text-slate"
+                >
+                  Copier
+                </button>
+              </div>
+            </div>
+
+            {/* Fiche prête à envoyer pour WhatsApp / SMS */}
+            <div className="space-y-2 pt-2 border-t border-line">
+              <label className="block text-[11px] font-semibold text-slate uppercase">
+                Fiche prête à envoyer (WhatsApp / SMS / Email)
+              </label>
+              <div className="p-2.5 bg-paper rounded border border-line font-mono text-[11px] text-ink whitespace-pre-line leading-relaxed max-h-32 overflow-y-auto">
+                {getFullShareText(credentialsTarget, credentialsPassword)}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = getFullShareText(credentialsTarget, credentialsPassword);
+                    copyToClipboard(text, "Fiche complète");
+                  }}
+                  className="px-3 py-1.5 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  <span>Copier toute la fiche</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = getFullShareText(credentialsTarget, credentialsPassword);
+                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-semibold hover:bg-emerald-700 transition flex items-center gap-1.5"
+                >
+                  <span>Partager sur WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCredentialsTarget(null)}
+                  className="ml-auto px-3 py-1.5 border border-line rounded text-xs font-semibold text-slate hover:bg-paper transition"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
         </div>

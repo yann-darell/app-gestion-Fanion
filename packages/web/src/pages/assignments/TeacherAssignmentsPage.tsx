@@ -38,7 +38,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
   // État spécifique primaire : titulaire de la classe
   const [primaryAssignment, setPrimaryAssignment] = useState<PrimaryTeacherAssignmentRecord | null>(null);
   const [savingPrimary, setSavingPrimary] = useState(false);
-  const [primarySuccessMsg, setPrimarySuccessMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const [loadingInit, setLoadingInit] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
@@ -63,7 +63,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         setCoefficients([]);
         setAssignments([]);
         setPrimaryAssignment(null);
-        setPrimarySuccessMsg(null);
+        setSuccessMsg(null);
       } catch (err: any) {
         console.error("Erreur initialisation web attributions:", err);
         setError("Impossible de charger les classes et enseignants.");
@@ -78,7 +78,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     if (!classId) return;
     setLoadingData(true);
     setError(null);
-    setPrimarySuccessMsg(null);
+    setSuccessMsg(null);
 
     try {
       if (selectedDivision === "primaire") {
@@ -111,17 +111,17 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     if (!selectedClassId) return;
     setSavingPrimary(true);
     setError(null);
-    setPrimarySuccessMsg(null);
+    setSuccessMsg(null);
 
     try {
       if (newTeacherId === "") {
         await removePrimaryTeacherAssignment(selectedClassId);
         setPrimaryAssignment(null);
-        setPrimarySuccessMsg("Attribution de la classe retirée.");
+        setSuccessMsg("Attribution titulaire retirée avec succès.");
       } else {
         const updated = await setPrimaryTeacherAssignment(selectedClassId, newTeacherId);
         setPrimaryAssignment(updated);
-        setPrimarySuccessMsg("Enseignant titulaire attribué avec succès à la classe !");
+        setSuccessMsg("Enseignant titulaire attribué avec succès à la classe !");
       }
     } catch (err: any) {
       console.error("Erreur affectation titulaire primaire:", err);
@@ -135,6 +135,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
     if (!selectedClassId) return;
     setSavingSubjectId(subjectId);
     setError(null);
+    setSuccessMsg(null);
 
     try {
       const existing = assignments.find((a) => a.subject_id === subjectId);
@@ -143,6 +144,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         if (existing) {
           await deleteAssignment(existing.id);
           setAssignments((prev) => prev.filter((a) => a.id !== existing.id));
+          setSuccessMsg("Attribution supprimée avec succès.");
         }
       } else {
         if (existing) {
@@ -163,6 +165,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
           const filtered = prev.filter((a) => a.subject_id !== subjectId);
           return [...filtered, created];
         });
+        setSuccessMsg("Enseignant attribué avec succès.");
       }
     } catch (err: any) {
       console.error("Erreur modification attribution web:", err);
@@ -257,9 +260,10 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
         </div>
       )}
 
-      {primarySuccessMsg && (
-        <div className="mb-4 p-3 bg-fanion-green/10 border border-fanion-green/20 rounded text-sm text-fanion-green font-medium">
-          {primarySuccessMsg}
+      {successMsg && (
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-800 font-medium flex items-center justify-between">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-900 text-xs font-bold ml-2">✕</button>
         </div>
       )}
 
@@ -323,6 +327,20 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
                   </option>
                 ))}
               </select>
+              {primaryAssignment?.teacher_id && (
+                <button
+                  type="button"
+                  onClick={() => handlePrimaryTeacherChange("")}
+                  disabled={savingPrimary}
+                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold flex items-center justify-center gap-1.5 transition flex-shrink-0"
+                  title="Retirer l'attribution titulaire de cette classe"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Retirer le titulaire</span>
+                </button>
+              )}
               {savingPrimary && (
                 <span className="text-xs text-slate italic flex items-center gap-1">
                   Enregistrement...
@@ -330,7 +348,7 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
               )}
             </div>
             <p className="text-xs text-slate leading-relaxed">
-              Dès que l'enseignant titulaire est sélectionné, il accède immédiatement à sa classe dans son espace de saisie des évaluations et notes APC.
+              Dès que l'enseignant titulaire est sélectionné, il accède immédiatement à sa classe dans son espace de saisie des évaluations et notes APC. Vous pouvez retirer l'attribution à tout moment avec le bouton « Retirer le titulaire ».
             </p>
           </div>
         </div>
@@ -395,24 +413,40 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
                         {coef.coefficient}
                       </td>
                       <td className="px-4 py-3">
-                        <select
-                          value={currentTeacherId}
-                          onChange={(e) =>
-                            handleTeacherChange(subject.id, e.target.value)
-                          }
-                          disabled={isSaving}
-                          className="w-full max-w-xs px-3 py-1.5 border border-line rounded text-sm bg-white focus:outline-none focus:border-ink"
-                        >
-                          <option value="">— Non assigné —</option>
-                          {teachers.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.full_name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={currentTeacherId}
+                            onChange={(e) =>
+                              handleTeacherChange(subject.id, e.target.value)
+                            }
+                            disabled={isSaving}
+                            className="w-full max-w-xs px-3 py-1.5 border border-line rounded text-sm bg-white focus:outline-none focus:border-ink font-medium"
+                          >
+                            <option value="">— Non assigné —</option>
+                            {teachers.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.full_name}
+                              </option>
+                            ))}
+                          </select>
+                          {currentTeacherId && (
+                            <button
+                              type="button"
+                              onClick={() => handleTeacherChange(subject.id, "")}
+                              disabled={isSaving}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition flex items-center gap-1 flex-shrink-0"
+                              title="Supprimer cette attribution"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              <span>Supprimer</span>
+                            </button>
+                          )}
+                        </div>
                         {isSaving && (
-                          <span className="ml-2 text-xs text-slate italic">
-                            Enreg...
+                          <span className="text-xs text-slate italic mt-1 block">
+                            Enregistrement en cours...
                           </span>
                         )}
                       </td>
@@ -471,21 +505,37 @@ export const TeacherAssignmentsPage: React.FC<TeacherAssignmentsPageProps> = ({
                     <label className="block text-[10px] text-slate uppercase font-semibold mb-1">
                       Enseignant
                     </label>
-                    <select
-                      value={currentTeacherId}
-                      onChange={(e) =>
-                        handleTeacherChange(subject.id, e.target.value)
-                      }
-                      disabled={isSaving}
-                      className="w-full text-xs border border-line rounded px-3 py-2 bg-white focus:outline-none focus:border-ink h-10 font-medium"
-                    >
-                      <option value="">— Non assigné —</option>
-                      {teachers.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.full_name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={currentTeacherId}
+                        onChange={(e) =>
+                          handleTeacherChange(subject.id, e.target.value)
+                        }
+                        disabled={isSaving}
+                        className="flex-1 text-xs border border-line rounded px-3 py-2 bg-white focus:outline-none focus:border-ink h-10 font-medium"
+                      >
+                        <option value="">— Non assigné —</option>
+                        {teachers.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      {currentTeacherId && (
+                        <button
+                          type="button"
+                          onClick={() => handleTeacherChange(subject.id, "")}
+                          disabled={isSaving}
+                          className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded transition flex items-center gap-1 flex-shrink-0"
+                          title="Supprimer cette attribution"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          <span>Supprimer</span>
+                        </button>
+                      )}
+                    </div>
                     {isSaving && (
                       <p className="text-[11px] text-slate italic mt-1">
                         Enregistrement en cours...
