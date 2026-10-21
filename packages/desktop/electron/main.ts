@@ -15,11 +15,35 @@ protocol.registerSchemesAsPrivileged([
     }
 ]);
 
-function createWindow() {
-    // Résolution de l'icône : en dev, remonter depuis dist-electron/ ; en prod, app.isPackaged = true
-    const iconPath = isDev
+function resolveIconPath(): string {
+    // En production : l'icône est dans les resources extraites par electron-builder
+    // En développement : remonter depuis dist-electron/ vers build-resources/
+    const candidates = [
+        path.join(process.resourcesPath, "build-resources", "icon.ico"),
+        path.join(__dirname, "..", "build-resources", "icon.ico"),
+        path.join(__dirname, "../../build-resources", "icon.ico"),
+        path.join(app.getAppPath(), "build-resources", "icon.ico"),
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            const fs = require("fs");
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        } catch (e) {
+            // continuer
+        }
+    }
+
+    // Fallback : chemin standard production
+    return isDev
         ? path.join(__dirname, "../build-resources/icon.ico")
         : path.join(process.resourcesPath, "build-resources/icon.ico");
+}
+
+function createWindow() {
+    const iconPath = resolveIconPath();
 
     const win = new BrowserWindow({
         width: 1280,
@@ -41,6 +65,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // Définir l'identifiant de l'application pour Windows — critique pour l'icône des raccourcis et de la barre des tâches
+    app.setAppUserModelId("cm.lefanion.desktop");
+
     // Configurer le gestionnaire pour le protocole fanion-photo://
     protocol.handle("fanion-photo", (request) => {
         try {

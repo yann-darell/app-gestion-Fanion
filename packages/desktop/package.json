@@ -26,8 +26,9 @@
     ],
     "extraResources": [
       {
-        "from": "build-resources/icon.ico",
-        "to": "build-resources/icon.ico"
+        "from": "build-resources",
+        "to": "build-resources",
+        "filter": ["**/*"]
       }
     ],
     "win": {
