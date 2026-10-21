@@ -188,9 +188,13 @@ export async function createPrimaryBulletinPdfBuffer(
 ): Promise<Uint8Array> {
   // 0. Paramètres de l'établissement
   const schoolSettings = await getSchoolSettings();
-  const schoolName = schoolSettings.primary_name || schoolSettings.name || "École Primaire Le Fanion";
+  const schoolName = (schoolSettings.primary_name && schoolSettings.primary_name.trim() !== "")
+    ? schoolSettings.primary_name.trim()
+    : "COMPLEXE SCOLAIRE BILINGUE LA GRÂCE";
   const schoolCity = schoolSettings.city || "Yaoundé";
-  const directorLabel = schoolSettings.primary_director_name || schoolSettings.director_name || "La Directrice";
+  const directorLabel = (schoolSettings.primary_director_name && schoolSettings.primary_director_name.trim() !== "")
+    ? schoolSettings.primary_director_name.trim()
+    : "La Directrice";
 
   // 1. Informations sur l'élève et sa classe
   const { data: student, error: studErr } = await supabase

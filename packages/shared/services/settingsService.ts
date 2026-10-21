@@ -47,10 +47,22 @@ export interface TeacherAccount {
   created_at: string;
 }
 
+const PRIMARY_SETTINGS_STORAGE_KEY = "fanion_primary_school_settings";
+
 /**
  * Récupère les paramètres uniques de l'établissement (school_settings)
  */
 export async function getSchoolSettings(): Promise<SchoolSettings> {
+  let localPrimary: Partial<SchoolSettings> = {};
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const stored = window.localStorage.getItem(PRIMARY_SETTINGS_STORAGE_KEY);
+      if (stored) localPrimary = JSON.parse(stored);
+    }
+  } catch (e) {
+    // ignorer si indisponible
+  }
+
   const { data, error } = await supabase
     .from("school_settings")
     .select("*")
@@ -58,24 +70,35 @@ export async function getSchoolSettings(): Promise<SchoolSettings> {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Erreur récupération paramètres établissement: ${error.message}`);
+    console.warn(`Erreur récupération paramètres établissement: ${error.message}`);
   }
+
+  const defaultSettings: SchoolSettings = {
+    name: "Collège Privé Laïc Le Fanion",
+    address: "Yaoundé, Cameroun",
+    city: "Yaoundé",
+    phone: "+237 600 00 00 00",
+    legal_notice: "Établissement d'Enseignement Secondaire Général et Bilingue",
+    director_name: "Le Principal",
+    primary_name: "Complexe Scolaire Bilingue La Grâce",
+    primary_director_name: "La Directrice",
+    primary_legal_notice: "Enseignement Primaire et Maternel - Système APC",
+  };
 
   if (!data) {
     return {
-      name: "Collège Bilingue Le Fanion",
-      address: "Yaoundé, Cameroun",
-      city: "Yaoundé",
-      phone: "+237 600 00 00 00",
-      legal_notice: "Établissement d'Enseignement Général et Bilingue",
-      director_name: "Le Principal",
-      primary_name: "École Primaire Le Fanion",
-      primary_director_name: "La Directrice",
-      primary_legal_notice: "Enseignement Primaire et Maternel - Système APC",
+      ...defaultSettings,
+      ...localPrimary,
     };
   }
 
-  return data as SchoolSettings;
+  const record = data as SchoolSettings;
+  return {
+    ...record,
+    primary_name: record.primary_name?.trim() || localPrimary.primary_name || defaultSettings.primary_name,
+    primary_director_name: record.primary_director_name?.trim() || localPrimary.primary_director_name || defaultSettings.primary_director_name,
+    primary_legal_notice: record.primary_legal_notice?.trim() || localPrimary.primary_legal_notice || defaultSettings.primary_legal_notice,
+  };
 }
 
 /**
@@ -83,6 +106,20 @@ export async function getSchoolSettings(): Promise<SchoolSettings> {
  * si les nouvelles colonnes primary_* n'ont pas encore été migrées en base.
  */
 export async function updateSchoolSettings(settings: Partial<SchoolSettings>): Promise<SchoolSettings> {
+  // Sauvegarde locale de secours pour le primaire
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const toStore = {
+        primary_name: settings.primary_name,
+        primary_director_name: settings.primary_director_name,
+        primary_legal_notice: settings.primary_legal_notice,
+      };
+      window.localStorage.setItem(PRIMARY_SETTINGS_STORAGE_KEY, JSON.stringify(toStore));
+    }
+  } catch (e) {
+    // ignorer
+  }
+
   const current = await getSchoolSettings();
 
   const performSave = async (payload: Partial<SchoolSettings>) => {
@@ -109,13 +146,25 @@ export async function updateSchoolSettings(settings: Partial<SchoolSettings>): P
   };
 
   try {
-    return await performSave(settings);
+    const saved = await performSave(settings);
+    return {
+      ...saved,
+      primary_name: settings.primary_name || saved.primary_name || "Complexe Scolaire Bilingue La Grâce",
+      primary_director_name: settings.primary_director_name || saved.primary_director_name || "La Directrice",
+      primary_legal_notice: settings.primary_legal_notice || saved.primary_legal_notice || "Enseignement Primaire et Maternel - Système APC",
+    };
   } catch (err: any) {
-    // Si la colonne primary_* n'existe pas encore en DB (code 42703 PostgreSQL)
-    if (err?.code === "42703" || err?.message?.includes("primary_")) {
-      console.warn("Colonnes primary_* non encore présentes en base de données. Sauvegarde des paramètres de base.");
+    // Si la colonne primary_* n'existe pas encore en DB (code PGRST204 ou 42703)
+    if (err?.code === "PGRST204" || err?.code === "42703" || err?.message?.includes("primary_") || err?.message?.includes("column")) {
+      console.warn("Colonnes primary_* non présentes dans la base distante. Sauvegarde des paramètres de base et conservation locale du primaire.");
       const { primary_name, primary_director_name, primary_legal_notice, ...baseSettings } = settings;
-      return await performSave(baseSettings);
+      const savedBase = await performSave(baseSettings);
+      return {
+        ...savedBase,
+        primary_name: primary_name || "Complexe Scolaire Bilingue La Grâce",
+        primary_director_name: primary_director_name || "La Directrice",
+        primary_legal_notice: primary_legal_notice || "Enseignement Primaire et Maternel - Système APC",
+      };
     }
     throw new Error(`Erreur mise à jour paramètres: ${err.message}`);
   }

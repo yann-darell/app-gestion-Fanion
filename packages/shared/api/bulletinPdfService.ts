@@ -653,47 +653,61 @@ export async function createStudentBulletinPdfBuffer(
     color: rgb(1, 1, 1),
   });
 
-  // Col 1 Contenu (Aéré sur 48pt) : Affichage des Séquences et de la Période
-  let periodLineText = "";
+  // Col 1 Contenu (Aéré sur 48pt) : Affichage selon le type de période (Séquence vs Trimestre)
   if (periodType === "term") {
+    // Cas Trimestre : afficher les moyennes des séquences qui composent ce trimestre, puis la moyenne trimestrielle
     const seqsSummary = termSequencesInfo.length > 0
-      ? termSequencesInfo.map((s) => `${s.label} : ${formatFr(s.average)}`).join("    ")
-      : "";
-    periodLineText = `Moyennes de l'Élève :   ${seqsSummary ? `${seqsSummary}    ` : ""}${periodTitleLabel} : ${formatFr(studentRow.average)}/20`;
+      ? termSequencesInfo.map((s) => `${s.label} : ${s.average !== null ? `${formatFr(s.average)}/20` : "--"}`).join("      ")
+      : `${periodTitleLabel} : ${formatFr(studentRow.average)}/20`;
+
+    page.drawText(`Moyennes des Séquences :   ${seqsSummary}`, {
+      x: marginX + 10,
+      y: tableY - 17,
+      size: 8.5,
+      font: fontBold,
+    });
+
+    page.drawText(`Moyenne du ${periodTitleLabel} : ${formatFr(studentRow.average)}/20    |    Moy. Classe : ${formatFr(report.stats.classAverage)}/20    |    Total : ${formatFr(totalStudentPoints)} pts`, {
+      x: marginX + 10,
+      y: tableY - 33,
+      size: 8,
+      font: fontBold,
+    });
   } else {
-    periodLineText = `Moyennes de l'Élève :   ${periodTitleLabel} : ${formatFr(studentRow.average)}/20`;
+    // Cas Séquence : afficher uniquement la moyenne séquentielle et les repères de classe (PAS de trimestres ni d'annuel)
+    page.drawText(`Moyenne de l'Élève :   ${periodTitleLabel} : ${formatFr(studentRow.average)}/20`, {
+      x: marginX + 10,
+      y: tableY - 17,
+      size: 8.5,
+      font: fontBold,
+    });
+
+    page.drawText(`Moyenne Générale de la Classe : ${formatFr(report.stats.classAverage)}/20    |    Total Points : ${formatFr(totalStudentPoints)} pts`, {
+      x: marginX + 10,
+      y: tableY - 33,
+      size: 8,
+      font: fontBold,
+    });
   }
 
-  page.drawText(periodLineText, {
-    x: marginX + 10,
-    y: tableY - 17,
-    size: 8.5,
-    font: fontBold,
-  });
-
-  page.drawText(`Trim 1 : ${periodType === "term" ? formatFr(studentRow.average) : "--"}    Trim 2 : --    Trim 3 : --    ANNUEL : ${formatFr(studentRow.average)}/20`, {
-    x: marginX + 10,
-    y: tableY - 34,
-    size: 8,
-    font: fontBold,
-  });
-
-  // Col 2 Contenu (Rangs - Aéré sur 48pt)
+  // Col 2 Contenu (Rangs contextuels : affichage du rang de la période sans forcer de "Rang Annuel")
   page.drawText(`Rang de l'élève : ${studentRow.rankDisplay}`, {
     x: marginX + saumonCol1Width + 12,
     y: tableY - 17,
     size: 8.5,
     font: fontBold,
   });
-  page.drawText(`Rang Annuel : ${studentRow.rankDisplay}`, {
+  page.drawText(`Effectif de la classe : ${report.rows.length} élève(s)`, {
     x: marginX + saumonCol1Width + 12,
-    y: tableY - 34,
-    size: 8,
-    font: fontBold,
+    y: tableY - 33,
+    size: 7.5,
+    font: fontRegular,
   });
 
   tableY -= saumonBoxHeight + 7;
-  const subText = "• La moyenne Trimestrielle n'est pas égale à la moyenne arithmétique des séquences";
+  const subText = periodType === "term"
+    ? "• La moyenne Trimestrielle n'est pas égale à la moyenne arithmétique des séquences"
+    : "• Bulletin séquentiel officiel - Évaluation continue des compétences";
   page.drawText(subText, {
     x: width / 2 - 135,
     y: tableY,

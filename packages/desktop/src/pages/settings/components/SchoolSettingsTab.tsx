@@ -17,7 +17,7 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
     name: settings.name || "Collège Bilingue Le Fanion",
     director_name: settings.director_name || "Le Principal",
     legal_notice: settings.legal_notice || "Établissement d'Enseignement Général et Bilingue",
-    primary_name: settings.primary_name || "École Primaire Le Fanion",
+    primary_name: settings.primary_name || "Complexe Scolaire Bilingue La Grâce",
     primary_director_name: settings.primary_director_name || "La Directrice",
     primary_legal_notice: settings.primary_legal_notice || "Enseignement Primaire et Maternel - Système APC",
     address: settings.address || "Yaoundé, Cameroun",
@@ -153,7 +153,7 @@ export const SchoolSettingsTab: React.FC<SchoolSettingsTabProps> = ({ settings, 
                 value={formData.primary_name || ""}
                 onChange={(e) => setFormData({ ...formData, primary_name: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white font-medium"
-                placeholder="ex: École Primaire Bilingue Le Fanion"
+                placeholder="ex: Complexe Scolaire Bilingue La Grâce"
               />
               <p className="text-[11px] text-slate-500 mt-1">
                 Ce nom remplacera le nom du collège en en-tête des bulletins de notes APC du primaire.
