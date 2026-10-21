@@ -397,6 +397,24 @@ export async function createStudentBulletinPdfBuffer(
   // ==========================================
   let tableY = idBoxY - 15;
 
+  // Helper : découpe un texte en lignes ne dépassant pas maxChars caractères (word-wrap simple)
+  function wrapText(text: string, maxChars: number): string[] {
+    if (!text) return [""];
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      if ((current + (current ? " " : "") + word).length <= maxChars) {
+        current += (current ? " " : "") + word;
+      } else {
+        if (current) lines.push(current);
+        current = word.length > maxChars ? word.substring(0, maxChars) : word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length === 0 ? [""] : lines;
+  }
+
   // Variante 9 colonnes généralisée à TOUTES les classes (avec Compétences Évaluées)
   const colWidths = [125, 110, 35, 30, 35, 45, 45, 40, 90]; // Total: 555 pt
   const headers = [
@@ -496,7 +514,11 @@ export async function createStudentBulletinPdfBuffer(
         grpCoeffSum += coef;
       }
 
-      const rowHeight = 16;
+      // Texte compétence avec word-wrap
+      const compText = competenciesBySubject[c.subject_id] || "Maîtriser les savoirs essentiels";
+      const compLines = wrapText(compText, 28); // ~28 chars par ligne pour 110pt à size 5
+      const rowHeight = compLines.length >= 2 ? 22 : 16;
+
       page.drawRectangle({
         x: marginX,
         y: tableY - rowHeight,
@@ -504,7 +526,6 @@ export async function createStudentBulletinPdfBuffer(
         height: rowHeight,
         borderColor: rgb(0, 0, 0),
         borderWidth: 0.5,
-        // color: transparent pour faire apparaître le filigrane conformément au DESIGN_VISUEL.md
       });
 
       // Rendu des séparateurs verticaux pour chaque colonne de la ligne
@@ -527,9 +548,12 @@ export async function createStudentBulletinPdfBuffer(
       let rX = marginX + colWidths[0];
       let cIdx = 1;
 
-      // Colonne Compétences Évaluées (texte réel issu de sequence_competencies)
-      const compText = competenciesBySubject[c.subject_id] || "Maîtriser les savoirs essentiels";
-      page.drawText(compText.substring(0, 32), { x: rX + 2, y: tableY - 10, size: 5, font: fontRegular });
+      // Colonne Compétences Évaluées — texte sur 1 ou 2 lignes (word-wrap)
+      const compLineY1 = compLines.length >= 2 ? tableY - 8 : tableY - 10;
+      page.drawText(compLines[0] || "", { x: rX + 2, y: compLineY1, size: 5, font: fontRegular });
+      if (compLines.length >= 2) {
+        page.drawText(compLines[1], { x: rX + 2, y: tableY - 16, size: 5, font: fontRegular });
+      }
       rX += colWidths[cIdx++];
 
       // TRIM (Optionnel / vide en séquence)
@@ -667,7 +691,7 @@ export async function createStudentBulletinPdfBuffer(
       font: fontBold,
     });
 
-    page.drawText(`Moyenne du ${periodTitleLabel} : ${formatFr(studentRow.average)}/20    |    Moy. Classe : ${formatFr(report.stats.classAverage)}/20    |    Total : ${formatFr(totalStudentPoints)} pts`, {
+    page.drawText(`Moyenne du ${periodTitleLabel} : ${formatFr(studentRow.average)}/20    |    Moy. Classe : ${formatFr(report.stats.classAverage)}/20`, {
       x: marginX + 10,
       y: tableY - 33,
       size: 8,
@@ -682,7 +706,7 @@ export async function createStudentBulletinPdfBuffer(
       font: fontBold,
     });
 
-    page.drawText(`Moyenne Générale de la Classe : ${formatFr(report.stats.classAverage)}/20    |    Total Points : ${formatFr(totalStudentPoints)} pts`, {
+    page.drawText(`Moyenne Générale de la Classe : ${formatFr(report.stats.classAverage)}/20`, {
       x: marginX + 10,
       y: tableY - 33,
       size: 8,
