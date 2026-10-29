@@ -28,10 +28,10 @@ interface TeacherGradesPageProps {
 
 export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }) => {
   const [assignments, setAssignments] = useState<TeacherAssignmentRecord[]>([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence("assignmentId", "");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useSelectionPersistence<string>("assignmentId", "");
 
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
-  const [selectedSequenceId, setSelectedSequenceId] = useSelectionPersistence("sequenceId", "");
+  const [selectedSequenceId, setSelectedSequenceId] = useSelectionPersistence<string>("sequenceId", "");
   const [isPrimaryClass, setIsPrimaryClass] = useState(false);
 
   const [students, setStudents] = useState<AssignedStudentRecord[]>([]);
@@ -85,7 +85,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       const assignmentsData = await listTeacherAssignments(assignmentFilters);
       setAssignments(assignmentsData);
 
-      let initialAssignmentId = selectedAssignmentId;
+      let initialAssignmentId: string = selectedAssignmentId;
       if (!initialAssignmentId || !assignmentsData.some((a) => a.id === initialAssignmentId)) {
         if (assignmentsData.length > 0) {
           initialAssignmentId = assignmentsData[0].id;
@@ -96,7 +96,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       const seqsData = await listSequences();
       setSequences(seqsData);
 
-      let initialSeqId = selectedSequenceId;
+      let initialSeqId: string = selectedSequenceId;
       if (!initialSeqId || !seqsData.some((s) => s.id === initialSeqId)) {
         if (seqsData.length > 0) {
           initialSeqId = seqsData[0].id;
@@ -327,7 +327,6 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   const unassignedStudents = students.filter(
     (s) => gradesMap[s.id] === undefined || isNaN(gradesMap[s.id])
   );
-  const isClassComplete = totalStudentsCount > 0 && gradedStudentsCount === totalStudentsCount;
 
   // L'écriture est verrouillée si l'enseignant a validé (Direction peut toujours modifier)
   const isReadOnlyForUser = isTeacher && isLockedBySubmission;
