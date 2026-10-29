@@ -32,6 +32,15 @@ export function getAppreciationCode(termAverage: number): string {
 }
 
 /**
+ * Formate un rang sous forme ordinale française (1er, 2ème, 3ème, etc., avec gestion des ex-æquo).
+ */
+export function formatOrdinalRank(rank: number | null | undefined, isTie: boolean = false): string {
+  if (rank === null || rank === undefined || rank <= 0) return "-";
+  const suffix = rank === 1 ? "er" : "ème";
+  return `${rank}${suffix}${isTie ? " ex" : ""}`;
+}
+
+/**
  * Libellé complet du code d'appréciation
  */
 export function getAppreciationLabel(code: string): string {

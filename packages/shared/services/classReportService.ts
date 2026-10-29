@@ -8,12 +8,15 @@ import {
 } from "../api/subjects";
 
 import { supabase } from "../api/supabaseClient";
+import { formatOrdinalRank } from "../api/gradeCalculations";
 
 export interface StudentSubjectGrade {
   subject_id: string;
   score: number | null; // null si non noté ou NC
   displayValue: string; // "NC" ou string décimale (ex: "14.50")
   isNC: boolean;
+  subjectRank?: number | null; // Rang de l'élève dans cette matière
+  subjectRankDisplay?: string; // "1er", "2ème ex", etc.
 }
 
 export interface StudentReportRow {
@@ -23,6 +26,7 @@ export interface StudentReportRow {
   averageDisplay: string; // "NC" ou "13.22"
   rank: number | null;
   rankDisplay: string; // "1er/8", "2ex/8", ou "NC" / "-"
+  ordinalRankDisplay?: string; // "1er", "2ème", "2ème ex" (sans le /total)
   isRanked: boolean;
 }
 
@@ -187,11 +191,46 @@ export async function generateClassReport(
       averageDisplay: average !== null ? average.toFixed(2) : "NC",
       rank: null,
       rankDisplay: "NC",
+      ordinalRankDisplay: "NC",
       isRanked: false,
     };
   });
 
-  // 5. Appliquer le Classement (Règle confirmé : uniquement élèves avec moyenne calculable)
+  // 4b. Calcul des rangs par matière (Rang par matière sur les élèves ayant composé)
+  activeSubjects.forEach((sub) => {
+    // Récupérer les notes valides pour cette matière
+    const subGrades = rows
+      .map((r) => ({
+        studentId: r.student.id,
+        grade: r.gradesBySubject[sub.id],
+      }))
+      .filter((item) => item.grade && !item.grade.isNC && item.grade.score !== null);
+
+    // Trier les notes par ordre décroissant
+    subGrades.sort((a, b) => (b.grade.score as number) - (a.grade.score as number));
+
+    let currRank = 1;
+    for (let i = 0; i < subGrades.length; i++) {
+      const isTieWithPrev = i > 0 && subGrades[i].grade.score === subGrades[i - 1].grade.score;
+      if (isTieWithPrev) {
+        subGrades[i].grade.subjectRank = subGrades[i - 1].grade.subjectRank;
+      } else {
+        currRank = i + 1;
+        subGrades[i].grade.subjectRank = currRank;
+      }
+    }
+
+    // Formater l'affichage ordinal du rang de la matière (1er, 2ème, 2ème ex, etc.)
+    for (let i = 0; i < subGrades.length; i++) {
+      const isTieWithNext = i < subGrades.length - 1 && subGrades[i + 1].grade.score === subGrades[i].grade.score;
+      const isTieWithPrev = i > 0 && subGrades[i - 1].grade.score === subGrades[i].grade.score;
+      const isTie = isTieWithNext || isTieWithPrev;
+      const r = subGrades[i].grade.subjectRank;
+      subGrades[i].grade.subjectRankDisplay = formatOrdinalRank(r, isTie);
+    }
+  });
+
+  // 5. Appliquer le Classement Général (sur les élèves ayant une moyenne calculable)
   const rankedRows = rows.filter((r) => r.average !== null);
   rankedRows.sort((a, b) => (b.average as number) - (a.average as number));
 
@@ -200,30 +239,22 @@ export async function generateClassReport(
   let currentRank = 1;
   for (let i = 0; i < rankedRows.length; i++) {
     if (i > 0 && rankedRows[i].average === rankedRows[i - 1].average) {
-      // Ex-æquo : même rang que le précédent
       rankedRows[i].rank = rankedRows[i - 1].rank;
-      const isTie = true;
-      rankedRows[i].rankDisplay = `${rankedRows[i].rank}${isTie ? "ex" : ""}/${totalRanked}`;
     } else {
       currentRank = i + 1;
       rankedRows[i].rank = currentRank;
-
-      // Détecter si le suivant est ex-æquo avec nous pour formater l'affichage
-      const isTie = i < rankedRows.length - 1 && rankedRows[i + 1].average === rankedRows[i].average;
-      rankedRows[i].rankDisplay = `${currentRank}${isTie ? "ex" : ""}/${totalRanked}`;
     }
     rankedRows[i].isRanked = true;
   }
 
-  // Ajuster le suffixe "ex" pour le premier d'un groupe d'ex-æquo
+  // Ajuster le formatage du rang : avec dénominateur pour les bordereaux et sans dénominateur (ordinalRankDisplay)
   for (let i = 0; i < rankedRows.length; i++) {
     const hasNextTie = i < rankedRows.length - 1 && rankedRows[i + 1].average === rankedRows[i].average;
     const hasPrevTie = i > 0 && rankedRows[i - 1].average === rankedRows[i].average;
-    if (hasNextTie || hasPrevTie) {
-      rankedRows[i].rankDisplay = `${rankedRows[i].rank}ex/${totalRanked}`;
-    } else {
-      rankedRows[i].rankDisplay = `${rankedRows[i].rank}/${totalRanked}`;
-    }
+    const isTie = hasNextTie || hasPrevTie;
+
+    rankedRows[i].rankDisplay = `${rankedRows[i].rank}${isTie ? "ex" : ""}/${totalRanked}`;
+    rankedRows[i].ordinalRankDisplay = formatOrdinalRank(rankedRows[i].rank, isTie);
   }
 
   // Remettre à jour les lignes initiales avec les informations de classement

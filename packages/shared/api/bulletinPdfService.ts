@@ -486,6 +486,18 @@ export async function createStudentBulletinPdfBuffer(
     let grpPointsSum = 0;
     let grpCoeffSum = 0;
 
+    // Précalcul des moyennes de classe PAR MATIÈRE pour ce groupe
+    const subjectClassAverageMap: Record<string, number | null> = {};
+    grpCoeffs.forEach((c) => {
+      const subScores = report.rows
+        .map((r) => r.gradesBySubject[c.subject_id])
+        .filter((g) => g && !g.isNC && g.score !== null)
+        .map((g) => g.score as number);
+      subjectClassAverageMap[c.subject_id] = subScores.length > 0
+        ? subScores.reduce((a, b) => a + b, 0) / subScores.length
+        : null;
+    });
+
     grpCoeffs.forEach((c) => {
       rowCounter++;
       const sub = report.subjects.find((s) => s.id === c.subject_id);
@@ -572,12 +584,13 @@ export async function createStudentBulletinPdfBuffer(
       page.drawText(totalPoints, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
       rX += colWidths[cIdx++];
 
-      // MOY DE CLASSE
-      page.drawText(formatFr(report.stats.classAverage), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+      // MOY DE CLASSE (moyenne de classe pour CETTE matière uniquement)
+      page.drawText(formatFr(subjectClassAverageMap[c.subject_id]), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
       rX += colWidths[cIdx++];
 
-      // RANG
-      page.drawText(studentRow.rankDisplay || "1er", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+      // RANG (rang par matière, pas le rang global)
+      const subjectRankText = gradeItem?.subjectRankDisplay || (score !== null ? "1er" : "NC");
+      page.drawText(subjectRankText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
       rX += colWidths[cIdx++];
 
       // APPRÉCIATION
@@ -714,14 +727,17 @@ export async function createStudentBulletinPdfBuffer(
     });
   }
 
-  // Col 2 Contenu (Rangs contextuels : affichage du rang de la période sans forcer de "Rang Annuel")
-  page.drawText(`Rang de l'élève : ${studentRow.rankDisplay}`, {
+  // Col 2 Contenu (Rang ordinal sans dénominateur N/N, et effectif différencié composants/total)
+  const ordinalRank = studentRow.ordinalRankDisplay || studentRow.rankDisplay || "NC";
+  page.drawText(`Rang : ${ordinalRank}`, {
     x: marginX + saumonCol1Width + 12,
     y: tableY - 17,
     size: 8.5,
     font: fontBold,
   });
-  page.drawText(`Effectif de la classe : ${report.rows.length} élève(s)`, {
+  const composants = report.stats.rankedStudentsCount;
+  const effectifTotal = report.stats.totalStudents;
+  page.drawText(`${composants} composant(s) / ${effectifTotal} élève(s)`, {
     x: marginX + saumonCol1Width + 12,
     y: tableY - 33,
     size: 7.5,
