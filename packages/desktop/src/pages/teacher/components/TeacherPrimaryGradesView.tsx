@@ -9,6 +9,7 @@ import {
   getOrCreatePrimaryEvaluationForMonth,
   listPrimaryGrades,
   upsertPrimaryGrade,
+  deletePrimaryGradeByCriteria,
   listPrimaryMonths,
 } from "@fanion/shared";
 
@@ -105,24 +106,45 @@ export const TeacherPrimaryGradesView: React.FC<TeacherPrimaryGradesViewProps> =
   };
 
   const handlePrimaryScoreChange = (studentId: string, subEvalId: string, valStr: string) => {
-    const val = parseFloat(valStr);
+    const trimmed = valStr.trim();
     setPrimaryGradeMap((prev) => {
       const studentGrades = { ...prev[studentId] };
-      if (isNaN(val)) delete studentGrades[subEvalId];
-      else studentGrades[subEvalId] = val;
+      if (trimmed === "") {
+        delete studentGrades[subEvalId];
+      } else {
+        const val = parseFloat(trimmed);
+        if (!isNaN(val)) {
+          studentGrades[subEvalId] = val;
+        }
+      }
       return { ...prev, [studentId]: studentGrades };
     });
   };
 
   const handlePrimaryScoreBlur = async (studentId: string, subEvalId: string) => {
+    if (!primaryEvalId) return;
     const score = primaryGradeMap[studentId]?.[subEvalId];
-    if (score === undefined || isNaN(score)) return;
+    const cellKey = `${studentId}_${subEvalId}`;
+
+    if (score === undefined || isNaN(score)) {
+      try {
+        setSavingPrimaryCell(cellKey);
+        await deletePrimaryGradeByCriteria(studentId, subEvalId, primaryEvalId);
+        setSavedPrimaryCell(cellKey);
+        setTimeout(() => { setSavedPrimaryCell((prev) => prev === cellKey ? null : prev); }, 1500);
+      } catch (err: any) {
+        console.error("Erreur suppression note primaire desktop:", err);
+      } finally {
+        setSavingPrimaryCell(null);
+      }
+      return;
+    }
+
     try {
-      const cellKey = `${studentId}_${subEvalId}`;
       setSavingPrimaryCell(cellKey);
       await upsertPrimaryGrade(studentId, subEvalId, primaryEvalId, score);
       setSavedPrimaryCell(cellKey);
-      setTimeout(() => { setSavedPrimaryCell((prev) => prev === cellKey ? null : prev); }, 2000);
+      setTimeout(() => { setSavedPrimaryCell((prev) => prev === cellKey ? null : prev); }, 1500);
     } catch (err: any) {
       setError(err.message || "Erreur de sauvegarde.");
     } finally {

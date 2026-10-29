@@ -17,6 +17,8 @@ import {
   listPrimaryApcStructure,
   listPrimaryGrades,
   upsertPrimaryGrade,
+  deleteGradeByCriteria,
+  deletePrimaryGradeByCriteria,
   getOrCreatePrimaryEvaluationForMonth,
   supabase,
 } from "@fanion/shared";
@@ -303,24 +305,42 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
   // 4. Handlers Collège
   // ──────────────────────────────────────────────────────────────────────────
   const handleScoreChange = (studentId: string, valueStr: string) => {
-    const val = parseFloat(valueStr);
-    if (isNaN(val)) {
+    const trimmed = valueStr.trim();
+    if (trimmed === "") {
       const newMap = { ...gradesMap };
       delete newMap[studentId];
       setGradesMap(newMap);
       return;
     }
-    setGradesMap((prev) => ({ ...prev, [studentId]: val }));
+    const val = parseFloat(trimmed);
+    if (!isNaN(val)) {
+      setGradesMap((prev) => ({ ...prev, [studentId]: val }));
+    }
   };
 
   const handleScoreBlur = async (studentId: string) => {
+    if (!selectedSubjectId || !selectedSequenceId) return;
     const score = gradesMap[studentId];
-    if (score === undefined || isNaN(score)) return;
+
+    // Si le champ est vidé, supprimer la note de la base
+    if (score === undefined || isNaN(score)) {
+      try {
+        setSavingMap((prev) => ({ ...prev, [studentId]: true }));
+        await deleteGradeByCriteria(studentId, selectedSubjectId, selectedSequenceId);
+        setSavedStatusMap((prev) => ({ ...prev, [studentId]: true }));
+        setTimeout(() => { setSavedStatusMap((prev) => ({ ...prev, [studentId]: false })); }, 1500);
+      } catch (err: any) {
+        console.error("Erreur suppression note:", err);
+      } finally {
+        setSavingMap((prev) => ({ ...prev, [studentId]: false }));
+      }
+      return;
+    }
+
     if (score < 0 || score > 20) {
       setError("La note doit être comprise entre 0 et 20.");
       return;
     }
-    if (!selectedSubjectId || !selectedSequenceId) return;
 
     try {
       setSavingMap((prev) => ({ ...prev, [studentId]: true }));
@@ -339,13 +359,16 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
   // 5. Handlers Primaire APC
   // ──────────────────────────────────────────────────────────────────────────
   const handlePrimaryScoreChange = (studentId: string, subEvalId: string, valueStr: string) => {
-    const val = parseFloat(valueStr);
+    const trimmed = valueStr.trim();
     setPrimaryGradeMap((prev) => {
       const studentMap = { ...(prev[studentId] || {}) };
-      if (isNaN(val)) {
+      if (trimmed === "") {
         delete studentMap[subEvalId];
       } else {
-        studentMap[subEvalId] = val;
+        const val = parseFloat(trimmed);
+        if (!isNaN(val)) {
+          studentMap[subEvalId] = val;
+        }
       }
       return { ...prev, [studentId]: studentMap };
     });
@@ -354,7 +377,22 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
   const handlePrimaryScoreBlur = async (studentId: string, subEvalId: string) => {
     if (!primaryEvalId) return;
     const score = primaryGradeMap[studentId]?.[subEvalId];
-    if (score === undefined || isNaN(score)) return;
+    const cellKey = `${studentId}_${subEvalId}`;
+
+    if (score === undefined || isNaN(score)) {
+      // Cellule vidée : suppression en base
+      try {
+        setSavingPrimaryCell(cellKey);
+        await deletePrimaryGradeByCriteria(studentId, subEvalId, primaryEvalId);
+        setSavedPrimaryCell(cellKey);
+        setTimeout(() => { setSavedPrimaryCell(null); }, 1500);
+      } catch (err: any) {
+        console.error("Erreur suppression note APC:", err);
+      } finally {
+        setSavingPrimaryCell(null);
+      }
+      return;
+    }
 
     const scale = primaryScales.find((s) => s.sub_evaluation_id === subEvalId);
     const maxScore = scale?.max_score ?? 10;
@@ -364,7 +402,6 @@ export const AdminGradesPage: React.FC<AdminGradesPageProps> = () => {
       return;
     }
 
-    const cellKey = `${studentId}_${subEvalId}`;
     try {
       setSavingPrimaryCell(cellKey);
       setError(null);

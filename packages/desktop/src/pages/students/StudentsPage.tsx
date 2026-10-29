@@ -12,6 +12,7 @@ import {
   useSelectionPersistence,
   getStudentsSuppliesSummaryMap,
   StudentSupplySummary,
+  generateStudentDirectoryPdf,
 } from "@fanion/shared";
 import StudentFilters from "./components/StudentFilters";
 import NewStudentModal from "./components/NewStudentModal";
@@ -33,6 +34,9 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
   // Filters
   const [classIdFilter, setClassIdFilter] = useSelectionPersistence("classId", "all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // PDF répertoire
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -163,6 +167,38 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
     ? classes.find((c) => c.id === suppliesModalStudent.class_id) || null
     : null;
 
+  // Classe actuellement filtrée (pour le répertoire PDF)
+  const filteredClass = classIdFilter !== "all"
+    ? classes.find((c) => c.id === classIdFilter) || null
+    : null;
+
+  const handleGenerateDirectoryPdf = async () => {
+    if (!filteredClass) return;
+    setIsGeneratingPdf(true);
+    try {
+      const className = `${filteredClass.name} (${filteredClass.level})`;
+      const buffer = await generateStudentDirectoryPdf({
+        classId: filteredClass.id,
+        className,
+        schoolYearLabel: "",
+      });
+      const blob = new Blob([new Uint8Array(buffer).buffer as ArrayBuffer], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Repertoire_${filteredClass.name.replace(/\s+/g, "_")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Erreur génération répertoire PDF:", err);
+      alert(`Erreur lors de la génération du répertoire : ${err.message}`);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -175,6 +211,31 @@ export default function StudentsPage({ userRole }: { userRole?: string }) {
         </div>
         {isWriteAuthorized && (
           <div className="flex items-center gap-2 self-start sm:self-auto">
+            {filteredClass && (
+              <button
+                onClick={handleGenerateDirectoryPdf}
+                disabled={isGeneratingPdf}
+                className="px-3.5 py-2 bg-paper-dark hover:bg-slate/10 text-slate-700 border border-line rounded text-sm font-medium transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={`Générer le répertoire PDF de la classe ${filteredClass.name}`}
+              >
+                {isGeneratingPdf ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    <span>Génération...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    </svg>
+                    <span>Répertoire PDF</span>
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={() => navigate("/settings?tab=supplies")}
               className="px-3.5 py-2 bg-paper-dark hover:bg-slate/10 text-slate-700 border border-line rounded text-sm font-medium transition flex items-center gap-1.5 cursor-pointer"

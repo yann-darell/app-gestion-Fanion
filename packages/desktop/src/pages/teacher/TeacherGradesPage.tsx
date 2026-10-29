@@ -7,6 +7,7 @@ import {
   listStudents,
   listGrades,
   upsertGrade,
+  deleteGradeByCriteria,
   listSequences,
   getSubjectLetterGrade,
   TeacherAssignmentRecord,
@@ -54,6 +55,10 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Modale de confirmation pour les élèves sans note
+  const [showUnassignedConfirmModal, setShowUnassignedConfirmModal] = useState(false);
+  const [unassignedStudentsList, setUnassignedStudentsList] = useState<AssignedStudentRecord[]>([]);
+
   const isTeacher = userRole === "enseignant";
 
   useEffect(() => {
@@ -80,15 +85,23 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       const assignmentsData = await listTeacherAssignments(assignmentFilters);
       setAssignments(assignmentsData);
 
-      if (assignmentsData.length > 0) {
-        setSelectedAssignmentId((prev) => (prev && assignmentsData.some(a => a.id === prev) ? prev : assignmentsData[0].id));
+      let initialAssignmentId = selectedAssignmentId;
+      if (!initialAssignmentId || !assignmentsData.some((a) => a.id === initialAssignmentId)) {
+        if (assignmentsData.length > 0) {
+          initialAssignmentId = assignmentsData[0].id;
+          setSelectedAssignmentId(initialAssignmentId);
+        }
       }
 
       const seqsData = await listSequences();
       setSequences(seqsData);
 
-      if (seqsData.length > 0) {
-        setSelectedSequenceId((prev) => (prev && seqsData.some(s => s.id === prev) ? prev : seqsData[0].id));
+      let initialSeqId = selectedSequenceId;
+      if (!initialSeqId || !seqsData.some((s) => s.id === initialSeqId)) {
+        if (seqsData.length > 0) {
+          initialSeqId = seqsData[0].id;
+          setSelectedSequenceId(initialSeqId);
+        }
       }
     } catch (err: any) {
       console.error("Erreur chargement attributions desktop:", err);
@@ -151,7 +164,7 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
       setCompetencyDescription("");
       setIsLockedBySubmission(false);
     }
-  }, [selectedAssignmentId, selectedSequenceId, isPrimaryClass]);
+  }, [currentAssignment, selectedAssignmentId, selectedSequenceId, isPrimaryClass]);
 
   const fetchCompetencyAndSubmission = async (classId: string, subjectId: string, sequenceId: string) => {
     try {
@@ -237,32 +250,50 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
   };
 
   const handleScoreChange = (studentId: string, valueStr: string) => {
-    const val = parseFloat(valueStr);
-    if (isNaN(val)) {
+    const trimmed = valueStr.trim();
+    if (trimmed === "") {
       const newMap = { ...gradesMap };
       delete newMap[studentId];
       setGradesMap(newMap);
       return;
     }
 
-    setGradesMap((prev) => ({
-      ...prev,
-      [studentId]: val,
-    }));
+    const val = parseFloat(trimmed);
+    if (!isNaN(val)) {
+      setGradesMap((prev) => ({
+        ...prev,
+        [studentId]: val,
+      }));
+    }
   };
 
   const handleScoreBlur = async (studentId: string) => {
     if (isTeacher && isLockedBySubmission) return;
+    if (!currentAssignment || !selectedSequenceId) return;
 
     const score = gradesMap[studentId];
-    if (score === undefined || isNaN(score)) return;
+
+    // Si le champ est vidé, supprimer la note de la base
+    if (score === undefined || isNaN(score)) {
+      try {
+        setSavingMap((prev) => ({ ...prev, [studentId]: true }));
+        await deleteGradeByCriteria(studentId, currentAssignment.subject_id, selectedSequenceId);
+        setSavedStatusMap((prev) => ({ ...prev, [studentId]: true }));
+        setTimeout(() => {
+          setSavedStatusMap((prev) => ({ ...prev, [studentId]: false }));
+        }, 1500);
+      } catch (err: any) {
+        console.error("Erreur suppression note desktop:", err);
+      } finally {
+        setSavingMap((prev) => ({ ...prev, [studentId]: false }));
+      }
+      return;
+    }
 
     if (score < 0 || score > 20) {
       setError("La note doit être comprise entre 0 et 20.");
       return;
     }
-
-    if (!currentAssignment || !selectedSequenceId) return;
 
     try {
       setSavingMap((prev) => ({ ...prev, [studentId]: true }));
@@ -289,27 +320,43 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
 
   // Calcul du workflow de validation
   const totalStudentsCount = students.length;
-  const gradedStudentsCount = students.filter(
+  const gradedStudents = students.filter(
     (s) => gradesMap[s.id] !== undefined && !isNaN(gradesMap[s.id])
-  ).length;
+  );
+  const gradedStudentsCount = gradedStudents.length;
+  const unassignedStudents = students.filter(
+    (s) => gradesMap[s.id] === undefined || isNaN(gradesMap[s.id])
+  );
   const isClassComplete = totalStudentsCount > 0 && gradedStudentsCount === totalStudentsCount;
 
   // L'écriture est verrouillée si l'enseignant a validé (Direction peut toujours modifier)
   const isReadOnlyForUser = isTeacher && isLockedBySubmission;
 
-  const handleSubmitClass = async () => {
+  const handleStartSubmitClass = () => {
     if (!currentAssignment || !selectedSequenceId || !currentUserId) return;
-    if (!isClassComplete) {
-      setError("Toutes les notes de la classe doivent être saisies avant de valider.");
-      return;
-    }
+    if (students.length === 0) return;
 
-    const confirmMsg = "Êtes-vous sûr de vouloir valider et envoyer les notes de la classe ?\n\nUne fois validées, vos notes seront verrouillées et vous ne pourrez plus les modifier.";
-    if (!window.confirm(confirmMsg)) return;
+    if (unassignedStudents.length > 0) {
+      setUnassignedStudentsList(unassignedStudents);
+      setShowUnassignedConfirmModal(true);
+    } else {
+      if (
+        window.confirm(
+          "Êtes-vous sûr de vouloir valider et envoyer les notes de la classe ?\n\nUne fois validées, vos notes seront verrouillées et vous ne pourrez plus les modifier."
+        )
+      ) {
+        executeSubmitClass();
+      }
+    }
+  };
+
+  const executeSubmitClass = async () => {
+    if (!currentAssignment || !selectedSequenceId || !currentUserId) return;
 
     try {
       setSubmitting(true);
       setError(null);
+      setShowUnassignedConfirmModal(false);
 
       // Si la compétence a été saisie, s'assurer qu'elle est enregistrée
       if (competencyDescription.trim()) {
@@ -561,17 +608,17 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
           {/* Barre d'action de validation globale de la classe */}
           <div className="p-4 border-t border-line bg-paper/30 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-xs text-slate">
-              {!isClassComplete ? (
-                <span className="text-signal-red font-medium">
-                  <span className="inline-flex items-center gap-1.5"><AlertTriangleIcon className="w-4 h-4 text-signal-red flex-shrink-0" /> Toutes les notes doivent être remplies ({gradedStudentsCount}/{totalStudentsCount}) pour pouvoir valider la classe.</span>
-                </span>
-              ) : isLockedBySubmission ? (
+              {isLockedBySubmission ? (
                 <span className="text-fanion-green font-medium">
                   <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-fanion-green flex-shrink-0" /> Toutes les notes ont été validées et transmises à la Direction.</span>
                 </span>
+              ) : unassignedStudents.length > 0 ? (
+                <span className="text-amber-700 font-medium">
+                  <span className="inline-flex items-center gap-1.5"><AlertTriangleIcon className="w-4 h-4 text-amber-600 flex-shrink-0" /> Notes saisies : <strong>{gradedStudentsCount}/{totalStudentsCount}</strong> ({unassignedStudents.length} sans note &rarr; non classé{unassignedStudents.length > 1 ? "s" : ""}).</span>
+                </span>
               ) : (
                 <span className="text-slate font-medium">
-                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-slate flex-shrink-0" /> Toutes les notes sont saisies. Vous pouvez maintenant valider et envoyer les notes.</span>
+                  <span className="inline-flex items-center gap-1.5"><CheckCircleIcon className="w-4 h-4 text-slate flex-shrink-0" /> Toutes les notes sont saisies ({gradedStudentsCount}/{totalStudentsCount}). Prête à valider.</span>
                 </span>
               )}
             </div>
@@ -580,10 +627,10 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
               <button
                 type="button"
                 id="btn-validate-class-grades"
-                disabled={!isClassComplete || submitting || isReadOnlyForUser}
-                onClick={handleSubmitClass}
+                disabled={submitting || isReadOnlyForUser || totalStudentsCount === 0}
+                onClick={handleStartSubmitClass}
                 className={`px-5 py-2.5 rounded text-sm font-bold shadow-sm transition-all flex items-center gap-2 ${
-                  isClassComplete && !isReadOnlyForUser
+                  !isReadOnlyForUser && totalStudentsCount > 0
                     ? "bg-fanion-green hover:bg-emerald-700 text-white cursor-pointer"
                     : "bg-slate/20 text-slate/60 cursor-not-allowed"
                 }`}
@@ -591,6 +638,62 @@ export const TeacherGradesPage: React.FC<TeacherGradesPageProps> = ({ userRole }
                 {submitting ? "Validation en cours..." : "Valider et envoyer les notes de la classe"}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'avertissement et confirmation pour les élèves sans note */}
+      {showUnassignedConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 sm:p-6 space-y-4 border border-line animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <AlertTriangleIcon className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-ink">Confirmation des élèves sans note</h3>
+                <p className="text-xs text-slate">Certains élèves n'ont aucune note renseignée.</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900 space-y-1">
+              <p className="font-semibold">
+                Attention : Les élèves suivants n'ont pas de note et seront considérés comme <u>NON CLASSÉS</u> pour cette matière :
+              </p>
+              <div className="max-h-36 overflow-y-auto mt-2 divide-y divide-amber-200/60 bg-white/80 rounded border border-amber-200">
+                {unassignedStudentsList.map((st, i) => (
+                  <div key={st.id} className="px-3 py-1.5 flex items-center justify-between text-xs">
+                    <span className="font-medium text-ink">
+                      #{i + 1} {st.last_name} {st.first_name}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate">{st.matricule || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-slate leading-relaxed">
+              Confirmez-vous que vous souhaitez valider et envoyer les notes de cette classe ? Une fois validée, la saisie sera verrouillée.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowUnassignedConfirmModal(false)}
+                disabled={submitting}
+                className="px-4 py-2 border border-line rounded text-xs font-semibold text-slate hover:bg-paper transition"
+              >
+                Annuler et compléter
+              </button>
+              <button
+                type="button"
+                onClick={executeSubmitClass}
+                disabled={submitting}
+                className="px-4 py-2 bg-fanion-green hover:bg-emerald-700 text-white rounded text-xs font-bold transition shadow-sm"
+              >
+                {submitting ? "Validation..." : "Oui, valider avec ces non-classés"}
+              </button>
+            </div>
           </div>
         </div>
       )}

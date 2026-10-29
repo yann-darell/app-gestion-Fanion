@@ -25,3 +25,4 @@ export * from "./hooks/useSelectionPersistence";
 export * from "./assets/logoBase64";
 export * from "./assets/logoPrimaireBase64";
 export * from "./api/primaryScalesService";
+export * from "./api/studentDirectoryPdfService";

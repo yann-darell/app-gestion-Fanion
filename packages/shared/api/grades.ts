@@ -120,6 +120,24 @@ export async function deleteGrade(id: string): Promise<void> {
 }
 
 /**
+ * Supprime une note secondaire par élève, matière et séquence (lorsque le champ est vidé).
+ */
+export async function deleteGradeByCriteria(
+  studentId: string,
+  subjectId: string,
+  sequenceId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("grades")
+    .delete()
+    .eq("student_id", studentId)
+    .eq("subject_id", subjectId)
+    .eq("sequence_id", sequenceId);
+  if (error) throw error;
+}
+
+
+/**
  * Récupère la compétence évaluée pour une classe, une matière et une séquence.
  */
 export async function getSequenceCompetency(
@@ -366,4 +384,23 @@ export async function upsertPrimaryGrade(
 
   if (error) throw error;
 }
+
+/**
+ * Supprime une note primaire lorsqu'un champ est vidé.
+ */
+export async function deletePrimaryGradeByCriteria(
+  studentId: string,
+  subEvaluationId: string,
+  primaryEvaluationId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("primary_grades")
+    .delete()
+    .eq("student_id", studentId)
+    .eq("sub_evaluation_id", subEvaluationId)
+    .eq("primary_evaluation_id", primaryEvaluationId);
+
+  if (error) throw error;
+}
+
 
