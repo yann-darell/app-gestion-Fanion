@@ -10,7 +10,7 @@ import { getSchoolSettings, SchoolSettings } from "../services/settingsService";
 export interface GenerateBulletinOptions {
   studentId: string;
   periodId: string;
-  periodType?: "sequence" | "term";
+  periodType?: "sequence" | "term" | "annual";
 }
 
 export interface BulletinCompletenessDiagnostic {
@@ -21,12 +21,12 @@ export interface BulletinCompletenessDiagnostic {
 }
 
 /**
- * Diagnostic de complétude des notes d'un élève pour un trimestre ou une séquence donné(e).
+ * Diagnostic de complétude des notes d'un élève pour un trimestre, une séquence ou l'année.
  */
 export async function checkStudentBulletinCompleteness(
   studentId: string,
   periodId: string,
-  periodType: "sequence" | "term" = "term"
+  periodType: "sequence" | "term" | "annual" = "term"
 ): Promise<BulletinCompletenessDiagnostic> {
   // Récupérer l'élève pour avoir sa classe
   const { data: student, error: studErr } = await supabase
@@ -73,7 +73,7 @@ export async function checkStudentBulletinCompleteness(
 export async function createStudentBulletinPdfBuffer(
   studentId: string,
   periodId: string,
-  periodType: "sequence" | "term" = "term"
+  periodType: "sequence" | "term" | "annual" = "term"
 ): Promise<Uint8Array> {
   // 1. Récupération des données de l'élève
   const { data: student, error: studErr } = await supabase
@@ -89,11 +89,13 @@ export async function createStudentBulletinPdfBuffer(
 
   const classId = student.class_id;
 
-  // Récupérer le libellé de la période (Terme ou Séquence)
-  let periodTitleLabel = periodType === "term" ? "TRIMESTRE" : "SÉQUENCE";
+  // Récupérer le libellé de la période (Terme, Séquence ou Annuel)
+  let periodTitleLabel = periodType === "annual" ? "ANNUEL" : periodType === "term" ? "TRIMESTRE" : "SÉQUENCE";
   let termSequencesInfo: { label: string; average: number | null }[] = [];
 
-  if (periodType === "term") {
+  if (periodType === "annual") {
+    periodTitleLabel = "ANNUEL";
+  } else if (periodType === "term") {
     const { data: termData } = await supabase.from("terms").select("label").eq("id", periodId).single();
     if (termData?.label) {
       periodTitleLabel = termData.label.toUpperCase();
@@ -310,9 +312,11 @@ export async function createStudentBulletinPdfBuffer(
   // 2. CADRE TITRE RECTANGULAIRE 3D & ANNÉE
   // ==========================================
   const titleBoxY = headerTopY - 80;
-  // Formater proprement le titre (ex: BULLETIN DE LA 1ERE SEQUENCE ou BULLETIN DU 1ER TRIMESTRE)
+  // Formater proprement le titre (ex: BULLETIN DE LA 1ERE SEQUENCE ou BULLETIN DU 1ER TRIMESTRE ou BULLETIN ANNUEL)
   let formattedTitle = periodTitleLabel;
-  if (!formattedTitle.startsWith("BULLETIN")) {
+  if (periodType === "annual") {
+    formattedTitle = "BULLETIN ANNUEL";
+  } else if (!formattedTitle.startsWith("BULLETIN")) {
     if (formattedTitle.includes("SÉQUENCE") || formattedTitle.includes("SEQUENCE")) {
       formattedTitle = `BULLETIN DE LA ${formattedTitle}`;
     } else {
@@ -415,19 +419,37 @@ export async function createStudentBulletinPdfBuffer(
     return lines.length === 0 ? [""] : lines;
   }
 
-  // Variante 9 colonnes généralisée à TOUTES les classes (avec Compétences Évaluées)
-  const colWidths = [125, 110, 35, 30, 35, 45, 45, 40, 90]; // Total: 555 pt
-  const headers = [
-    "MATIÈRES",
-    "COMPÉTENCES ÉVALUÉES",
-    "TRIM",
-    "SEQ",
-    "COEF",
-    "MOY × COEF",
-    "MOY DE CLASSE",
-    "RANG",
-    "APPRÉCIATION",
-  ];
+  const isAnnual = periodType === "annual";
+  // En mode annuel : 10 colonnes exactes conformes aux bulletins officiels (BULLETIN 6e/5e/3e Annuel)
+  // En mode séquence/trimestre : 9 colonnes (avec Compétences Évaluées)
+  const colWidths = isAnnual
+    ? [135, 38, 35, 35, 35, 30, 45, 52, 40, 110] // Total: 555 pt
+    : [125, 110, 35, 30, 35, 45, 45, 40, 90]; // Total: 555 pt
+
+  const headers = isAnnual
+    ? [
+        "MATIÈRES",
+        "ANNUEL",
+        "TRIM 1",
+        "TRIM 2",
+        "TRIM 3",
+        "COEF",
+        "MOY × COEF",
+        "MOY DE CLASSE",
+        "RANG",
+        "APPRÉCIATION",
+      ]
+    : [
+        "MATIÈRES",
+        "COMPÉTENCES ÉVALUÉES",
+        "TRIM",
+        "SEQ",
+        "COEF",
+        "MOY × COEF",
+        "MOY DE CLASSE",
+        "RANG",
+        "APPRÉCIATION",
+      ];
 
   // Dessiner l'en-tête du tableau (fond transparent pour filigrane)
   page.drawRectangle({
@@ -451,7 +473,7 @@ export async function createStudentBulletinPdfBuffer(
   tableY -= 14;
 
   let rowCounter = 0;
-  const formatFr = (val: number | null | string): string => {
+  const formatFr = (val: number | null | undefined | string): string => {
     if (val === null || val === undefined || val === "NC") return "NC";
     const num = typeof val === "number" ? val : parseFloat(val);
     if (isNaN(num)) return "NC";
@@ -560,42 +582,83 @@ export async function createStudentBulletinPdfBuffer(
       let rX = marginX + colWidths[0];
       let cIdx = 1;
 
-      // Colonne Compétences Évaluées — texte sur 1 ou 2 lignes (word-wrap)
-      const compLineY1 = compLines.length >= 2 ? tableY - 8 : tableY - 10;
-      page.drawText(compLines[0] || "", { x: rX + 2, y: compLineY1, size: 5, font: fontRegular });
-      if (compLines.length >= 2) {
-        page.drawText(compLines[1], { x: rX + 2, y: tableY - 16, size: 5, font: fontRegular });
+      if (isAnnual) {
+        // 1. ANNUEL
+        page.drawText(displayScore, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
+        rX += colWidths[cIdx++];
+
+        // 2. TRIM 1
+        page.drawText(formatFr(gradeItem?.term1Score), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 3. TRIM 2
+        page.drawText(formatFr(gradeItem?.term2Score), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 4. TRIM 3
+        page.drawText(formatFr(gradeItem?.term3Score), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 5. COEF
+        page.drawText(coef.toString(), { x: rX + 6, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 6. MOY × COEF
+        page.drawText(totalPoints, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
+        rX += colWidths[cIdx++];
+
+        // 7. MOY DE CLASSE
+        page.drawText(formatFr(subjectClassAverageMap[c.subject_id]), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 8. RANG
+        const subjectRankText = gradeItem?.subjectRankDisplay || (score !== null ? "1er" : "NC");
+        page.drawText(subjectRankText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // 9. APPRÉCIATION (Échelle officielle APC : A+ / A / ECA / NA)
+        const appText = score !== null
+          ? (score >= 18 ? "A+ (Expert)" : score >= 15 ? "A (Acquis)" : score >= 11 ? "ECA (En cours)" : "NA (Non Acquis)")
+          : "NC";
+        page.drawText(appText, { x: rX + 4, y: tableY - 10, size: 6, font: fontBold });
+      } else {
+        // Colonne Compétences Évaluées — texte sur 1 ou 2 lignes (word-wrap)
+        const compLineY1 = compLines.length >= 2 ? tableY - 8 : tableY - 10;
+        page.drawText(compLines[0] || "", { x: rX + 2, y: compLineY1, size: 5, font: fontRegular });
+        if (compLines.length >= 2) {
+          page.drawText(compLines[1], { x: rX + 2, y: tableY - 16, size: 5, font: fontRegular });
+        }
+        rX += colWidths[cIdx++];
+
+        // TRIM (Optionnel / vide en séquence)
+        page.drawText(periodType === "term" ? displayScore : "--", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // SEQ
+        page.drawText(periodType === "sequence" ? displayScore : "--", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // COEF
+        page.drawText(coef.toString(), { x: rX + 6, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // MOY × COEF
+        page.drawText(totalPoints, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
+        rX += colWidths[cIdx++];
+
+        // MOY DE CLASSE (moyenne de classe pour CETTE matière uniquement)
+        page.drawText(formatFr(subjectClassAverageMap[c.subject_id]), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // RANG (rang par matière, pas le rang global)
+        const subjectRankText = gradeItem?.subjectRankDisplay || (score !== null ? "1er" : "NC");
+        page.drawText(subjectRankText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
+        rX += colWidths[cIdx++];
+
+        // APPRÉCIATION
+        const appText = score !== null ? (score >= 16 ? "Très Bien" : score >= 14 ? "Bien" : score >= 12 ? "Assez Bien" : score >= 10 ? "Passable" : "Médiocre") : "NC";
+        page.drawText(appText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
       }
-      rX += colWidths[cIdx++];
-
-      // TRIM (Optionnel / vide en séquence)
-      page.drawText(periodType === "term" ? displayScore : "--", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
-      rX += colWidths[cIdx++];
-
-      // SEQ
-      page.drawText(periodType === "sequence" ? displayScore : "--", { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
-      rX += colWidths[cIdx++];
-
-      // COEF
-      page.drawText(coef.toString(), { x: rX + 6, y: tableY - 10, size: 6.5, font: fontRegular });
-      rX += colWidths[cIdx++];
-
-      // MOY × COEF
-      page.drawText(totalPoints, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
-      rX += colWidths[cIdx++];
-
-      // MOY DE CLASSE (moyenne de classe pour CETTE matière uniquement)
-      page.drawText(formatFr(subjectClassAverageMap[c.subject_id]), { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
-      rX += colWidths[cIdx++];
-
-      // RANG (rang par matière, pas le rang global)
-      const subjectRankText = gradeItem?.subjectRankDisplay || (score !== null ? "1er" : "NC");
-      page.drawText(subjectRankText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontRegular });
-      rX += colWidths[cIdx++];
-
-      // APPRÉCIATION
-      const appText = score !== null ? (score >= 16 ? "Très Bien" : score >= 14 ? "Bien" : score >= 12 ? "Assez Bien" : score >= 10 ? "Passable" : "Médiocre") : "NC";
-      page.drawText(appText, { x: rX + 4, y: tableY - 10, size: 6.5, font: fontBold });
 
       tableY -= rowHeight;
     });
@@ -690,8 +753,26 @@ export async function createStudentBulletinPdfBuffer(
     color: rgb(1, 1, 1),
   });
 
-  // Col 1 Contenu (Aéré sur 48pt) : Affichage selon le type de période (Séquence vs Trimestre)
-  if (periodType === "term") {
+  // Col 1 Contenu (Aéré sur 48pt) : Affichage selon le type de période (Séquence vs Trimestre vs Annuel)
+  if (isAnnual) {
+    const t1Avg = formatFr(studentRow.termAverages?.term1);
+    const t2Avg = formatFr(studentRow.termAverages?.term2);
+    const t3Avg = formatFr(studentRow.termAverages?.term3);
+
+    page.drawText(`Moyennes Trimestrielles :   TRIM 1 : ${t1Avg}/20      TRIM 2 : ${t2Avg}/20      TRIM 3 : ${t3Avg}/20`, {
+      x: marginX + 10,
+      y: tableY - 17,
+      size: 8,
+      font: fontBold,
+    });
+
+    page.drawText(`MOYENNE ANNUELLE : ${formatFr(studentRow.average)}/20    |    Moy. Classe : ${formatFr(report.stats.classAverage)}/20`, {
+      x: marginX + 10,
+      y: tableY - 33,
+      size: 8.5,
+      font: fontBold,
+    });
+  } else if (periodType === "term") {
     // Cas Trimestre : afficher les moyennes des séquences qui composent ce trimestre, puis la moyenne trimestrielle
     const seqsSummary = termSequencesInfo.length > 0
       ? termSequencesInfo.map((s) => `${s.label} : ${s.average !== null ? `${formatFr(s.average)}/20` : "--"}`).join("      ")
@@ -729,7 +810,7 @@ export async function createStudentBulletinPdfBuffer(
 
   // Col 2 Contenu (Rang ordinal sans dénominateur N/N, et effectif différencié composants/total)
   const ordinalRank = studentRow.ordinalRankDisplay || studentRow.rankDisplay || "NC";
-  page.drawText(`Rang : ${ordinalRank}`, {
+  page.drawText(`${isAnnual ? "Rang Annuel" : "Rang"} : ${ordinalRank}`, {
     x: marginX + saumonCol1Width + 12,
     y: tableY - 17,
     size: 8.5,
@@ -745,7 +826,9 @@ export async function createStudentBulletinPdfBuffer(
   });
 
   tableY -= saumonBoxHeight + 7;
-  const subText = periodType === "term"
+  const subText = isAnnual
+    ? "• La moyenne Annuelle n'est pas égale à la moyenne arithmétique des trimestres"
+    : periodType === "term"
     ? "• La moyenne Trimestrielle n'est pas égale à la moyenne arithmétique des séquences"
     : "• Bulletin séquentiel officiel - Évaluation continue des compétences";
   page.drawText(subText, {
@@ -952,7 +1035,6 @@ export async function generateAndSaveStudentBulletin(
   options: GenerateBulletinOptions
 ): Promise<{ pdfPath: string; recordId: string; pdfBuffer: Uint8Array }> {
   const studentId = options.studentId;
-  const periodId = options.periodId;
   const periodType = options.periodType || "term";
 
   // 1. Récupérer l'année scolaire de l'élève pour le chemin déterministe
@@ -967,8 +1049,12 @@ export async function generateAndSaveStudentBulletin(
   const studentClass = student.classes as any;
   const schoolYearId = studentClass?.school_year_id || "default_year";
   
+  const periodId = (options.periodId === "annual" || !options.periodId)
+    ? schoolYearId
+    : options.periodId;
+
   // Chemin Storage déterministe fixe pour écrasement direct lors des régénérations
-  const storageRelativePath = `${schoolYearId}/${periodId}/${studentId}.pdf`;
+  const storageRelativePath = `${schoolYearId}/${periodType === "annual" ? "annual" : periodId}/${studentId}.pdf`;
 
   // 2. Générer le buffer PDF en mémoire
   const pdfBytes = await createStudentBulletinPdfBuffer(studentId, periodId, periodType);
@@ -987,12 +1073,21 @@ export async function generateAndSaveStudentBulletin(
   }
 
   // 4. Étape B : Insertion/Upsert atomic en base de données bulletin_generations
-  let termIdForDb = periodId;
+  let termIdForDb: string | null = periodId;
   if (periodType === "sequence") {
     const { data: seqObj } = await supabase.from("sequences").select("term_id").eq("id", periodId).single();
     if (seqObj?.term_id) {
       termIdForDb = seqObj.term_id;
     }
+  } else if (periodType === "annual") {
+    const { data: termObj } = await supabase
+      .from("terms")
+      .select("id")
+      .eq("school_year_id", schoolYearId)
+      .order("order_index", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    termIdForDb = termObj?.id || null;
   }
 
   const { data: dbRecord, error: dbErr } = await supabase
@@ -1052,7 +1147,7 @@ export interface StudentBulletinStatus {
  */
 export async function fetchClassBulletinsStatus(
   classId: string,
-  periodType: "sequence" | "term",
+  periodType: "sequence" | "term" | "annual",
   periodId: string
 ): Promise<Record<string, StudentBulletinStatus>> {
   // 1. Récupérer les élèves de la classe
@@ -1069,12 +1164,20 @@ export async function fetchClassBulletinsStatus(
   const studentIds = students.map((s) => s.id);
   if (studentIds.length === 0) return {};
 
+  let actualPeriodId = periodId;
+  if (periodType === "annual" && (periodId === "annual" || !periodId)) {
+    const { data: cls } = await supabase.from("classes").select("school_year_id").eq("id", classId).single();
+    if (cls?.school_year_id) {
+      actualPeriodId = cls.school_year_id;
+    }
+  }
+
   // 2. Récupérer les enregistrements de génération pour cette période
   const { data: generations, error: genErr } = await supabase
     .from("bulletin_generations")
     .select("student_id, pdf_path, generated_at")
     .eq("period_type", periodType)
-    .eq("period_id", periodId)
+    .eq("period_id", actualPeriodId)
     .in("student_id", studentIds);
 
   if (genErr) {
@@ -1109,7 +1212,7 @@ export async function fetchClassBulletinsStatus(
  */
 export async function generateClassCombinedBulletinsPdfBuffer(
   classId: string,
-  periodType: "sequence" | "term",
+  periodType: "sequence" | "term" | "annual",
   periodId: string,
   onProgress?: (current: number, total: number) => void
 ): Promise<Uint8Array> {
@@ -1125,6 +1228,14 @@ export async function generateClassCombinedBulletinsPdfBuffer(
     throw new Error("Aucun élève actif trouvé dans cette classe pour la génération groupée.");
   }
 
+  let actualPeriodId = periodId;
+  if (periodType === "annual" && (periodId === "annual" || !periodId)) {
+    const { data: cls } = await supabase.from("classes").select("school_year_id").eq("id", classId).single();
+    if (cls?.school_year_id) {
+      actualPeriodId = cls.school_year_id;
+    }
+  }
+
   const mergedPdf = await PDFDocument.create();
   const total = students.length;
 
@@ -1133,7 +1244,7 @@ export async function generateClassCombinedBulletinsPdfBuffer(
     if (onProgress) onProgress(i + 1, total);
 
     try {
-      const studentPdfBytes = await createStudentBulletinPdfBuffer(student.id, periodId, periodType);
+      const studentPdfBytes = await createStudentBulletinPdfBuffer(student.id, actualPeriodId, periodType);
       const studentPdf = await PDFDocument.load(studentPdfBytes);
       const copiedPages = await mergedPdf.copyPages(studentPdf, studentPdf.getPageIndices());
       copiedPages.forEach((page) => mergedPdf.addPage(page));

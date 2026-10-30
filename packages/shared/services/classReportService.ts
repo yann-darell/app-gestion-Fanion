@@ -17,6 +17,9 @@ export interface StudentSubjectGrade {
   isNC: boolean;
   subjectRank?: number | null; // Rang de l'élève dans cette matière
   subjectRankDisplay?: string; // "1er", "2ème ex", etc.
+  term1Score?: number | null;
+  term2Score?: number | null;
+  term3Score?: number | null;
 }
 
 export interface StudentReportRow {
@@ -28,6 +31,11 @@ export interface StudentReportRow {
   rankDisplay: string; // "1er/8", "2ex/8", ou "NC" / "-"
   ordinalRankDisplay?: string; // "1er", "2ème", "2ème ex" (sans le /total)
   isRanked: boolean;
+  termAverages?: {
+    term1: number | null;
+    term2: number | null;
+    term3: number | null;
+  };
 }
 
 export interface ReportDistributionCategory {
@@ -39,7 +47,7 @@ export interface ReportDistributionCategory {
 
 export interface ClassReportData {
   class_id: string;
-  periodType: "sequence" | "term" | "month";
+  periodType: "sequence" | "term" | "month" | "annual";
   periodId: string;
   subjects: Array<SubjectRecord & { coefficient: number }>;
   rows: StudentReportRow[];
@@ -55,6 +63,8 @@ export interface ClassReportData {
     successRate: number | null; // % >= 10
   };
   distribution: ReportDistributionCategory[];
+  /** Moyenne de la classe pour chaque matière (calculée sur les élèves ayant une note valide) */
+  subjectAverages: Record<string, { average: number | null; display: string }>;
 }
 
 /**
@@ -69,13 +79,13 @@ export interface ClassReportData {
  */
 export async function generateClassReport(
   classId: string,
-  periodType: "sequence" | "term" | "month",
+  periodType: "sequence" | "term" | "month" | "annual",
   periodId: string
 ): Promise<ClassReportData> {
   // Détection si classe primaire
   const { data: clsData } = await supabase
     .from("classes")
-    .select("id, name, level, division_id, divisions(nom)")
+    .select("id, name, level, division_id, school_year_id, divisions(nom)")
     .eq("id", classId)
     .maybeSingle();
 
@@ -83,7 +93,11 @@ export async function generateClassReport(
   const isPrimary = periodType === "month" || divisionName.includes("primaire") || divisionName.includes("primary");
 
   if (isPrimary) {
-    return generatePrimaryClassReportInternal(classId, clsData, periodType, periodId);
+    return generatePrimaryClassReportInternal(classId, clsData, periodType as "sequence" | "term" | "month", periodId);
+  }
+
+  if (periodType === "annual") {
+    return generateAnnualClassReportInternal(classId, clsData, periodId);
   }
 
   // 1. Récupérer la liste des élèves de la classe
@@ -291,6 +305,22 @@ export async function generateClassReport(
     else distribution[4].count++;
   });
 
+  // 8. Calcul des moyennes de classe par matière
+  const subjectAverages: Record<string, { average: number | null; display: string }> = {};
+  activeSubjects.forEach((sub) => {
+    const validScores = finalRows
+      .map((r) => r.gradesBySubject[sub.id])
+      .filter((g) => g && !g.isNC && g.score !== null)
+      .map((g) => g.score as number);
+    const avg = validScores.length > 0
+      ? validScores.reduce((acc, v) => acc + v, 0) / validScores.length
+      : null;
+    subjectAverages[sub.id] = {
+      average: avg,
+      display: avg !== null ? avg.toFixed(2) : "NC",
+    };
+  });
+
   return {
     class_id: classId,
     periodType,
@@ -309,6 +339,7 @@ export async function generateClassReport(
       successRate,
     },
     distribution,
+    subjectAverages,
   };
 }
 
@@ -518,6 +549,22 @@ async function generatePrimaryClassReportInternal(
     else distribution[4].count++;
   });
 
+  // 8. Moyennes de classe par domaine (matière)
+  const subjectAverages: Record<string, { average: number | null; display: string }> = {};
+  activeSubjects.forEach((sub) => {
+    const validScores = finalRows
+      .map((r) => r.gradesBySubject[sub.id])
+      .filter((g) => g && !g.isNC && g.score !== null)
+      .map((g) => g.score as number);
+    const avg = validScores.length > 0
+      ? validScores.reduce((acc, v) => acc + v, 0) / validScores.length
+      : null;
+    subjectAverages[sub.id] = {
+      average: avg,
+      display: avg !== null ? avg.toFixed(2) : "NC",
+    };
+  });
+
   return {
     class_id: classId,
     periodType,
@@ -536,5 +583,245 @@ async function generatePrimaryClassReportInternal(
       successRate,
     },
     distribution,
+    subjectAverages,
+  };
+}
+
+/**
+ * Génère le bordereau annuel d'une classe de collège en combinant les 3 trimestres.
+ */
+async function generateAnnualClassReportInternal(
+  classId: string,
+  clsData: any,
+  periodId: string
+): Promise<ClassReportData> {
+  const schoolYearId = clsData?.school_year_id || (periodId !== "annual" ? periodId : null);
+
+  // 1. Récupérer les trimestres de l'année scolaire
+  let termQuery = supabase
+    .from("terms")
+    .select("id, label, order_index, school_year_id")
+    .order("order_index", { ascending: true });
+
+  if (schoolYearId) {
+    termQuery = termQuery.eq("school_year_id", schoolYearId);
+  }
+
+  let { data: terms } = await termQuery;
+  if (!terms || terms.length === 0) {
+    const { data: allTerms } = await supabase
+      .from("terms")
+      .select("id, label, order_index, school_year_id")
+      .order("order_index", { ascending: true });
+    terms = allTerms || [];
+  }
+
+  const t1 = terms.find((t) => t.order_index === 1) || terms[0];
+  const t2 = terms.find((t) => t.order_index === 2) || terms[1];
+  const t3 = terms.find((t) => t.order_index === 3) || terms[2];
+
+  // 2. Calculer le bordereau pour chacun des 3 trimestres
+  const [rep1, rep2, rep3] = await Promise.all([
+    t1 ? generateClassReport(classId, "term", t1.id) : null,
+    t2 ? generateClassReport(classId, "term", t2.id) : null,
+    t3 ? generateClassReport(classId, "term", t3.id) : null,
+  ]);
+
+  // 3. Récupérer les élèves et les matières actives
+  const students = await listStudents({ classId });
+  const classCoeffs = await listCoefficients(classId);
+  const allSubjects = await listSubjects();
+  const activeSubjects = classCoeffs
+    .map((c) => {
+      const sub = allSubjects.find((s) => s.id === c.subject_id);
+      if (!sub) return null;
+      return { ...sub, coefficient: c.coefficient };
+    })
+    .filter((s): s is SubjectRecord & { coefficient: number } => s !== null);
+
+  // 4. Calculer la matrice annuelle par élève
+  const rows: StudentReportRow[] = students.map((student) => {
+    const r1 = rep1?.rows.find((r) => r.student.id === student.id);
+    const r2 = rep2?.rows.find((r) => r.student.id === student.id);
+    const r3 = rep3?.rows.find((r) => r.student.id === student.id);
+
+    const gradesBySubject: Record<string, StudentSubjectGrade> = {};
+    let weightedSum = 0;
+    let totalCoeff = 0;
+
+    activeSubjects.forEach((sub) => {
+      const g1 = r1?.gradesBySubject[sub.id];
+      const g2 = r2?.gradesBySubject[sub.id];
+      const g3 = r3?.gradesBySubject[sub.id];
+
+      const s1 = g1 && !g1.isNC && typeof g1.score === "number" ? g1.score : null;
+      const s2 = g2 && !g2.isNC && typeof g2.score === "number" ? g2.score : null;
+      const s3 = g3 && !g3.isNC && typeof g3.score === "number" ? g3.score : null;
+
+      const validScores = [s1, s2, s3].filter((s): s is number => s !== null);
+
+      let finalScore: number | null = null;
+      let isNC = true;
+
+      if (validScores.length > 0) {
+        finalScore = validScores.reduce((a, b) => a + b, 0) / validScores.length;
+        isNC = false;
+        weightedSum += finalScore * sub.coefficient;
+        totalCoeff += sub.coefficient;
+      }
+
+      gradesBySubject[sub.id] = {
+        subject_id: sub.id,
+        score: finalScore,
+        displayValue: isNC || finalScore === null ? "NC" : finalScore.toFixed(2),
+        isNC,
+        term1Score: s1,
+        term2Score: s2,
+        term3Score: s3,
+      };
+    });
+
+    const average = totalCoeff > 0 ? weightedSum / totalCoeff : null;
+
+    return {
+      student,
+      gradesBySubject,
+      average,
+      averageDisplay: average !== null ? average.toFixed(2) : "NC",
+      rank: null,
+      rankDisplay: "NC",
+      ordinalRankDisplay: "NC",
+      isRanked: false,
+      termAverages: {
+        term1: r1?.average ?? null,
+        term2: r2?.average ?? null,
+        term3: r3?.average ?? null,
+      },
+    };
+  });
+
+  // 5. Calcul des rangs par matière
+  activeSubjects.forEach((sub) => {
+    const subGrades = rows
+      .map((r) => ({
+        studentId: r.student.id,
+        grade: r.gradesBySubject[sub.id],
+      }))
+      .filter((item) => item.grade && !item.grade.isNC && item.grade.score !== null);
+
+    subGrades.sort((a, b) => (b.grade.score as number) - (a.grade.score as number));
+
+    let currRank = 1;
+    for (let i = 0; i < subGrades.length; i++) {
+      const isTieWithPrev = i > 0 && subGrades[i].grade.score === subGrades[i - 1].grade.score;
+      if (isTieWithPrev) {
+        subGrades[i].grade.subjectRank = subGrades[i - 1].grade.subjectRank;
+      } else {
+        currRank = i + 1;
+        subGrades[i].grade.subjectRank = currRank;
+      }
+    }
+
+    for (let i = 0; i < subGrades.length; i++) {
+      const isTieWithNext = i < subGrades.length - 1 && subGrades[i + 1].grade.score === subGrades[i].grade.score;
+      const isTieWithPrev = i > 0 && subGrades[i - 1].grade.score === subGrades[i].grade.score;
+      const isTie = isTieWithNext || isTieWithPrev;
+      const r = subGrades[i].grade.subjectRank;
+      subGrades[i].grade.subjectRankDisplay = formatOrdinalRank(r, isTie);
+    }
+  });
+
+  // 6. Appliquer le Classement Général
+  const rankedRows = rows.filter((r) => r.average !== null);
+  rankedRows.sort((a, b) => (b.average as number) - (a.average as number));
+
+  const totalRanked = rankedRows.length;
+
+  let currentRank = 1;
+  for (let i = 0; i < rankedRows.length; i++) {
+    if (i > 0 && rankedRows[i].average === rankedRows[i - 1].average) {
+      rankedRows[i].rank = rankedRows[i - 1].rank;
+    } else {
+      currentRank = i + 1;
+      rankedRows[i].rank = currentRank;
+    }
+    rankedRows[i].isRanked = true;
+  }
+
+  for (let i = 0; i < rankedRows.length; i++) {
+    const hasNextTie = i < rankedRows.length - 1 && rankedRows[i + 1].average === rankedRows[i].average;
+    const hasPrevTie = i > 0 && rankedRows[i - 1].average === rankedRows[i].average;
+    const isTie = hasNextTie || hasPrevTie;
+
+    rankedRows[i].rankDisplay = `${rankedRows[i].rank}${isTie ? "ex" : ""}/${totalRanked}`;
+    rankedRows[i].ordinalRankDisplay = formatOrdinalRank(rankedRows[i].rank, isTie);
+  }
+
+  const rowMap = new Map(rankedRows.map((r) => [r.student.id, r]));
+  const finalRows = rows.map((r) => rowMap.get(r.student.id) || r);
+
+  // 7. Calcul des Statistiques Générales
+  const validAverages = finalRows
+    .map((r) => r.average)
+    .filter((avg): avg is number => avg !== null);
+
+  const classAvgSum = validAverages.reduce((acc, v) => acc + v, 0);
+  const classAverage = validAverages.length > 0 ? classAvgSum / validAverages.length : null;
+  const maxAverage = validAverages.length > 0 ? Math.max(...validAverages) : null;
+  const minAverage = validAverages.length > 0 ? Math.min(...validAverages) : null;
+  
+  const successCount = validAverages.filter((v) => v >= 10).length;
+  const successRate = validAverages.length > 0 ? (successCount / validAverages.length) * 100 : null;
+
+  const distribution: ReportDistributionCategory[] = [
+    { label: "Non Acquis", range: "< 10", count: 0, color: "#EF4444" },
+    { label: "Passable (CMA)", range: "10 - 11.99", count: 0, color: "#F59E0B" },
+    { label: "Assez Bien (CA)", range: "12 - 13.99", count: 0, color: "#3B82F6" },
+    { label: "Bien (CBA)", range: "14 - 15.99", count: 0, color: "#10B981" },
+    { label: "Très Bien (CTBA)", range: "16 - 20", count: 0, color: "#8B5CF6" },
+  ];
+
+  validAverages.forEach((avg) => {
+    if (avg < 10) distribution[0].count++;
+    else if (avg < 12) distribution[1].count++;
+    else if (avg < 14) distribution[2].count++;
+    else if (avg < 16) distribution[3].count++;
+    else distribution[4].count++;
+  });
+
+  const subjectAverages: Record<string, { average: number | null; display: string }> = {};
+  activeSubjects.forEach((sub) => {
+    const validScores = finalRows
+      .map((r) => r.gradesBySubject[sub.id])
+      .filter((g) => g && !g.isNC && g.score !== null)
+      .map((g) => g.score as number);
+    const avg = validScores.length > 0
+      ? validScores.reduce((acc, v) => acc + v, 0) / validScores.length
+      : null;
+    subjectAverages[sub.id] = {
+      average: avg,
+      display: avg !== null ? avg.toFixed(2) : "NC",
+    };
+  });
+
+  return {
+    class_id: classId,
+    periodType: "annual",
+    periodId,
+    subjects: activeSubjects,
+    rows: finalRows,
+    stats: {
+      totalStudents: students.length,
+      rankedStudentsCount: totalRanked,
+      classAverage,
+      classAverageDisplay: classAverage !== null ? classAverage.toFixed(2) : "NC",
+      maxAverage,
+      maxAverageDisplay: maxAverage !== null ? maxAverage.toFixed(2) : "NC",
+      minAverage,
+      minAverageDisplay: minAverage !== null ? minAverage.toFixed(2) : "NC",
+      successRate,
+    },
+    distribution,
+    subjectAverages,
   };
 }

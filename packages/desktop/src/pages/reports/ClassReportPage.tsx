@@ -8,6 +8,7 @@ import {
   SequenceRecord,
   useSelectionPersistence,
   generateClassReportPdf,
+  generateClassAveragesReportPdf,
   listPrimaryMonths,
   generateClassReport,
   ClassReportData,
@@ -37,7 +38,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
   const [periodType, setPeriodType] = useSelectionPersistence<"sequence" | "term">("periodType", "sequence");
   const [terms, setTerms] = useState<TermRecord[]>([]);
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence("periodId", "");
+  const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence<string>("periodId", "");
 
   // Primaire (mois & trimestres)
   const [primaryPeriodType, setPrimaryPeriodType] = useSelectionPersistence<"month" | "term">("primaryClassReportPeriodType", "month");
@@ -99,7 +100,7 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
       }
     } else {
       if (terms.length > 0) {
-        setSelectedPeriodId((prev) => (prev && terms.some(t => t.id === prev) ? prev : terms[0].id));
+        setSelectedPeriodId((prev) => (prev && (prev === "annual" || terms.some(t => t.id === prev)) ? prev : terms[0].id));
       }
     }
   }, [periodType, sequences, terms]);
@@ -121,8 +122,18 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     }
   }, [primaryPeriodType, primaryMonths, terms]);
 
-  const activePeriodId = isPrimary ? selectedPrimaryPeriodId : selectedPeriodId;
-  const activePeriodType = isPrimary ? primaryPeriodType : periodType;
+  const isAnnualSelected = !isPrimary && periodType === "term" && selectedPeriodId === "annual";
+  const currentClass = classes.find((c) => c.id === selectedClassId);
+  const activePeriodId = isPrimary
+    ? selectedPrimaryPeriodId
+    : isAnnualSelected
+    ? (currentClass?.school_year_id || terms[0]?.school_year_id || "annual")
+    : selectedPeriodId;
+  const activePeriodType = isPrimary
+    ? primaryPeriodType
+    : isAnnualSelected
+    ? "annual"
+    : periodType;
 
   const loadReport = useCallback(async () => {
     if (!selectedClassId || !activePeriodId) return;
@@ -171,6 +182,8 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         pLabel =
           periodType === "sequence"
             ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+            : isAnnualSelected
+            ? "Annuel (Bilan Annuel)"
             : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
       }
 
@@ -235,6 +248,54 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
     }
   };
 
+  const [exportingAveragesPdf, setExportingAveragesPdf] = useState(false);
+
+  const handleExportAveragesPdf = async () => {
+    if (!reportData) return;
+    setExportingAveragesPdf(true);
+    setError(null);
+    try {
+      const clsName = classes.find((c) => c.id === selectedClassId)?.name || "Classe";
+      let pLabel = "";
+      if (isPrimary) {
+        if (primaryPeriodType === "month") {
+          const m = primaryMonths.find((m) => m.id === selectedPrimaryPeriodId);
+          pLabel = m ? `Mois de ${m.label}` : "Mois";
+        } else {
+          const t = terms.find((t) => t.id === selectedPrimaryPeriodId);
+          pLabel = t ? t.label : "Trimestre";
+        }
+      } else {
+        pLabel =
+          periodType === "sequence"
+            ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+            : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
+      }
+
+      const pdfBytes = await generateClassAveragesReportPdf({
+        reportData,
+        className: clsName,
+        periodLabel: pLabel,
+        isPrimary,
+      });
+
+      const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `Bordereau_Moyennes_${clsName.replace(/\s+/g, "_")}_${pLabel.replace(/\s+/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error("Erreur téléchargement bordereau des moyennes PDF:", err);
+      setError(err?.message || "Erreur lors de la génération du bordereau des moyennes PDF.");
+    } finally {
+      setExportingAveragesPdf(false);
+    }
+  };
+
   if (!isAuthorized) {
     return (
       <div className="p-6">
@@ -255,17 +316,33 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
         </div>
 
         {reportData && reportData.rows.length > 0 && (
-          <button
-            type="button"
-            onClick={handleExportPdf}
-            disabled={exportingPdf}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition shadow-sm disabled:opacity-50"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>{exportingPdf ? "Génération du PDF…" : "Télécharger le bordereau PDF"}</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              id="btn-export-averages-pdf"
+              onClick={handleExportAveragesPdf}
+              disabled={exportingAveragesPdf || exportingPdf}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold transition shadow-sm disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span>{exportingAveragesPdf ? "Génération du PDF…" : "Bordereau des moyennes (PDF)"}</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-export-full-pdf"
+              onClick={handleExportPdf}
+              disabled={exportingPdf || exportingAveragesPdf}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-ink text-white rounded text-xs font-semibold hover:bg-opacity-90 transition shadow-sm disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>{exportingPdf ? "Génération du PDF…" : "Bordereau complet (PDF)"}</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -439,11 +516,16 @@ export const ClassReportPage: React.FC<ClassReportPageProps> = ({ userRole }) =>
                       {seq.label}
                     </option>
                   ))
-                : terms.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
+                : (
+                    <>
+                      {terms.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label}
+                        </option>
+                      ))}
+                      <option value="annual">Annuel (Bilan Annuel)</option>
+                    </>
+                  )}
             </select>
           )}
         </div>

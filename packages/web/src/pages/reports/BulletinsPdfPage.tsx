@@ -43,7 +43,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
   const [periodType, setPeriodType] = useSelectionPersistence<"sequence" | "term">("periodType", "sequence");
   const [terms, setTerms] = useState<TermRecord[]>([]);
   const [sequences, setSequences] = useState<SequenceRecord[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence("periodId", "");
+  const [selectedPeriodId, setSelectedPeriodId] = useSelectionPersistence<string>("periodId", "");
 
   // Primaire : month / term
   const [primaryPeriodType, setPrimaryPeriodType] = useSelectionPersistence<"month" | "term">("primaryPeriodType", "month");
@@ -144,7 +144,7 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
       }
     } else {
       if (terms.length > 0) {
-        setSelectedPeriodId((prev) => (prev && terms.some((t) => t.id === prev) ? prev : terms[0].id));
+        setSelectedPeriodId((prev) => (prev && (prev === "annual" || terms.some((t) => t.id === prev)) ? prev : terms[0].id));
       }
     }
   }, [periodType, sequences, terms]);
@@ -190,6 +190,14 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     loadStudents();
   }, [loadStudents]);
 
+  // Résolution de la période active (Séquence, Trimestre ou Annuel)
+  const isAnnualSelected = !isPrimary && periodType === "term" && selectedPeriodId === "annual";
+  const activePeriodType: "sequence" | "term" | "annual" = isAnnualSelected ? "annual" : periodType;
+  const currentClass = classes.find((c) => c.id === selectedClassId);
+  const activePeriodId = isAnnualSelected
+    ? (currentClass?.school_year_id || terms[0]?.school_year_id || "annual")
+    : selectedPeriodId;
+
   // 4. Chargement déterministe des statuts des bulletins (Généré/Non généré) dès que Classe, Période ou Élèves changent
   const loadStatuses = useCallback(async () => {
     if (!selectedClassId || !selectedPeriodId || students.length === 0) {
@@ -198,14 +206,14 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
     }
     setLoadingStatuses(true);
     try {
-      const statuses = await fetchClassBulletinsStatus(selectedClassId, periodType, selectedPeriodId);
+      const statuses = await fetchClassBulletinsStatus(selectedClassId, activePeriodType, activePeriodId);
       setBulletinStatuses(statuses);
     } catch (err: any) {
       console.error("Erreur chargement statuts bulletins:", err);
     } finally {
       setLoadingStatuses(false);
     }
-  }, [selectedClassId, periodType, selectedPeriodId, students.length]);
+  }, [selectedClassId, activePeriodType, activePeriodId, students.length]);
 
   useEffect(() => {
     loadStatuses();
@@ -235,10 +243,10 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
       } else {
         // Bulletin collège
         if (!selectedPeriodId) {
-          setError("Veuillez d'abord sélectionner une période (séquence ou trimestre) valide.");
+          setError("Veuillez d'abord sélectionner une période (séquence, trimestre ou annuel) valide.");
           return;
         }
-        const diag = await checkStudentBulletinCompleteness(student.id, selectedPeriodId, periodType);
+        const diag = await checkStudentBulletinCompleteness(student.id, activePeriodId, activePeriodType);
         setDiagnostic(diag);
 
         if (!diag.isComplete) {
@@ -265,8 +273,8 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
 
       await generateAndSaveStudentBulletin({
         studentId,
-        periodId: selectedPeriodId,
-        periodType,
+        periodId: activePeriodId,
+        periodType: activePeriodType,
       });
 
       // Rafraîchir les statuts
@@ -371,12 +379,14 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
       const pLabel =
         periodType === "sequence"
           ? sequences.find((s) => s.id === selectedPeriodId)?.label || "Séquence"
+          : isAnnualSelected
+          ? "Annuel"
           : terms.find((t) => t.id === selectedPeriodId)?.label || "Trimestre";
 
       const pdfBytes = await generateClassCombinedBulletinsPdfBuffer(
         selectedClassId,
-        periodType,
-        selectedPeriodId,
+        activePeriodType,
+        activePeriodId,
         (current, total) => setBatchProgress({ current, total })
       );
 
@@ -485,14 +495,19 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
 
         {/* Type de Période — conditionnel selon la division */}
         {!isPrimary ? (
-          /* Collège : Séquence / Trimestre */
+          /* Collège : Séquence / Trimestre / Annuel */
           <>
             <div>
               <label className="block text-xs font-semibold text-slate uppercase mb-1">Type de Période</label>
               <div className="flex gap-1 p-1 bg-paper border border-line rounded">
                 <button
                   type="button"
-                  onClick={() => setPeriodType("sequence")}
+                  onClick={() => {
+                    setPeriodType("sequence");
+                    if (selectedPeriodId === "annual" && sequences.length > 0) {
+                      setSelectedPeriodId(sequences[0].id);
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded text-xs font-medium transition ${
                     periodType === "sequence" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
                   }`}
@@ -501,18 +516,35 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPeriodType("term")}
+                  onClick={() => {
+                    setPeriodType("term");
+                    if (selectedPeriodId === "annual" && terms.length > 0) {
+                      setSelectedPeriodId(terms[0].id);
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                    periodType === "term" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
+                    periodType === "term" && selectedPeriodId !== "annual" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
                   }`}
                 >
                   Trimestre
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPeriodType("term");
+                    setSelectedPeriodId("annual");
+                  }}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                    periodType === "term" && selectedPeriodId === "annual" ? "bg-ink text-white font-semibold" : "text-slate hover:bg-line/40"
+                  }`}
+                >
+                  Annuel
                 </button>
               </div>
             </div>
             <div className="min-w-[180px]">
               <label className="block text-xs font-semibold text-slate uppercase mb-1">
-                {periodType === "sequence" ? "Séquence" : "Trimestre"}
+                {periodType === "sequence" ? "Séquence" : isAnnualSelected ? "Période" : "Trimestre"}
               </label>
               <select
                 value={selectedPeriodId}
@@ -524,9 +556,14 @@ export const BulletinsPdfPage: React.FC<BulletinsPdfPageProps> = ({ userRole }) 
                   ? sequences.map((seq) => (
                       <option key={seq.id} value={seq.id}>{seq.label}</option>
                     ))
-                  : terms.map((t) => (
-                      <option key={t.id} value={t.id}>{t.label}</option>
-                    ))}
+                  : (
+                    <>
+                      {terms.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                      <option value="annual">Annuel</option>
+                    </>
+                  )}
               </select>
             </div>
           </>
